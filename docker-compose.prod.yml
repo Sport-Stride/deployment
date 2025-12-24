@@ -1,7 +1,7 @@
 #version: '3.9'
 
-# Production Docker Compose - Uses pre-built images from GHCR
-# NO local builds; only pulls from registry
+# Production Docker Compose - Multi-Domain Setup
+# Supports: app.coachify.training (main app) + coachify.training (vitrine)
 # Deploy: docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 networks:
@@ -12,6 +12,8 @@ networks:
 
 volumes:
   nginx_logs:
+    driver: local
+  certbot_data:
     driver: local
 
 services:
@@ -31,12 +33,14 @@ services:
       - ./nginx/ssl:/etc/nginx/ssl
       - nginx_logs:/var/log/nginx
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot_data:/var/www/certbot:ro
     environment:
       - TZ=UTC
     networks:
       - coachify_net
     depends_on:
       - frontend
+      - landing
       - identifier-api
       - notification-api
       - account-api
@@ -65,6 +69,99 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+
+  # ===========================================
+  # Frontend Applications
+  # ===========================================
+
+  # Main Application Frontend (app.coachify.training)
+  frontend:
+    image: ghcr.io/sport-stride/coachify-frontend:${FRONTEND_VERSION:-latest}
+    container_name: coachify-frontend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_USE_PROXY=true
+      
+      # Internal backend service URLs (for server-side proxy)
+      - ACCOUNT_API_URL=http://account-api:8082
+      - CHAT_API_BASE_URL=http://chat-api:8083
+      - WORKOUT_API_URL=http://workout-api:8087
+      - INVITATION_API_URL=http://invitation-api:8085
+      - STATISTICS_API_URL=http://statistics-api:8089
+      - TRACKER_API_URL=http://tracker-api:8088
+      - CONTENT_API_URL=http://content-api:8084
+      - PAYMENT_API_URL=http://payments-api:8086
+    networks:
+      - coachify_net
+    pull_policy: always
+    depends_on:
+      - identifier-api
+      - notification-api
+      - account-api
+      - chat-api
+      - content-api
+      - invitation-api
+      - payments-api
+      - workout-api
+      - tracker-api
+      - statistics-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/session"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+        labels: "service=frontend,env=production"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  # Vitrine/Landing Page Frontend (coachify.training)
+  landing:
+    image: ghcr.io/sport-stride/coachify-landing:${VITRINE_VERSION:-latest}
+    container_name: coachify-landing
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      # Add any vitrine-specific env vars
+      - NEXT_PUBLIC_APP_URL=https://app.coachify.training
+      - NEXT_PUBLIC_API_URL=https://app.coachify.training/api
+    networks:
+      - coachify_net
+    pull_policy: always
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+        labels: "service=vitrine,env=production"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # ===========================================
   # Core Microservices - Go APIs (Registry Images)
@@ -389,83 +486,3 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
-
-  # ===========================================
-  # Frontend Application
-  # ===========================================
-
-  frontend:
-    image: ghcr.io/sport-stride/coachify-frontend:${FRONTEND_VERSION:-latest}
-    container_name: coachify-frontend
-    restart: unless-stopped
-    env_file:
-      - .env.production
-    environment:
-      - .env.production
-      - NODE_ENV=production
-      - NEXT_PUBLIC_USE_PROXY=true
-      # Auth configuration
-      # - NEXTAUTH_URL=${NEXTAUTH_URL}
-      # - AUTH_SECRET=${AUTH_SECRET}
-      # - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      # - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      
-      # # Internal backend service URLs (for server-side proxy)
-      - ACCOUNT_API_URL=http://account-api:8082
-      - CHAT_API_BASE_URL=http://chat-api:8083
-      - WORKOUT_API_URL=http://workout-api:8087
-      - INVITATION_API_URL=http://invitation-api:8085
-      - STATISTICS_API_URL=http://statistics-api:8089
-      - TRACKER_API_URL=http://tracker-api:8088
-      - CONTENT_API_URL=http://content-api:8084
-      - PAYMENT_API_URL=http://payments-api:8086
-      
-      # # Client-side API base URLs (these point to external domain)
-      # - NEXT_PUBLIC_ACCOUNT_API_BASE_URL=${NEXT_PUBLIC_ACCOUNT_API_BASE_URL}
-      # - NEXT_PUBLIC_CHAT_API_BASE_URL=${NEXT_PUBLIC_CHAT_API_BASE_URL}
-      # - NEXT_PUBLIC_WORKOUT_API_BASE_URL=${NEXT_PUBLIC_WORKOUT_API_BASE_URL}
-      # - NEXT_PUBLIC_PAYMENT_API_BASE_URL=${NEXT_PUBLIC_PAYMENT_API_BASE_URL}
-      # - NEXT_PUBLIC_INVITATION_API_BASE_URL=${NEXT_PUBLIC_INVITATION_API_BASE_URL}
-      # - NEXT_PUBLIC_TRACKER_API_BASE_URL=${NEXT_PUBLIC_TRACKER_API_BASE_URL}
-      # - NEXT_PUBLIC_STATISTICS_API_BASE_URL=${NEXT_PUBLIC_STATISTICS_API_BASE_URL}
-      # - NEXT_PUBLIC_BLOG_API_BASE_URL=${NEXT_PUBLIC_BLOG_API_BASE_URL}
-      
-      # # Other services
-      # - NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}
-      # - NEXT_PUBLIC_CLOUDINARY_API_KEY=${NEXT_PUBLIC_CLOUDINARY_API_KEY}
-      # - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
-      # - NEXT_PUBLIC_ABLY_KEY=${NEXT_PUBLIC_ABLY_KEY}
-    networks:
-      - coachify_net
-    pull_policy: always
-    depends_on:
-      - identifier-api
-      - notification-api
-      - account-api
-      - chat-api
-      - content-api
-      - invitation-api
-      - payments-api
-      - workout-api
-      - tracker-api
-      - statistics-api
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/session"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 40s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "3"
-        labels: "service=frontend,env=production"
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 1G

@@ -1,4 +1,4 @@
-version: '3.9'
+#version: '3.9'
 
 # Production Docker Compose - Uses pre-built images from GHCR
 # NO local builds; only pulls from registry
@@ -7,20 +7,11 @@ version: '3.9'
 networks:
   coachify_net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
     driver_opts:
       "com.docker.network.driver.mtu": "1500"
 
 volumes:
   nginx_logs:
-    driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
-  alertmanager_data:
     driver: local
 
 services:
@@ -38,13 +29,12 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl
-      - ./nginx/docker-entrypoint.d:/docker-entrypoint.d:ro
       - nginx_logs:/var/log/nginx
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     environment:
       - TZ=UTC
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.2
+      - coachify_net
     depends_on:
       - frontend
       - identifier-api
@@ -57,12 +47,6 @@ services:
       - workout-api
       - tracker-api
       - statistics-api
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     logging:
       driver: "json-file"
       options:
@@ -98,15 +82,8 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.10
+      - coachify_net
     pull_policy: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     logging:
       driver: "json-file"
       options:
@@ -121,8 +98,6 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
-    sysctls:
-      - net.ipv4.ip_local_port_range=10000 65535
 
   notification-api:
     image: ghcr.io/sport-stride/coachify-notification-api:${NOTIFICATION_API_VERSION:-latest}
@@ -135,15 +110,8 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.11
+      - coachify_net
     pull_policy: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     logging:
       driver: "json-file"
       options:
@@ -174,20 +142,11 @@ services:
       - INVITATION_API_URL=http://invitation-api:8085
       - PAYMENT_API_URL=http://payments-api:8086
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.12
+      - coachify_net
     pull_policy: always
     depends_on:
-      identifier-api:
-        condition: service_healthy
-      notification-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - identifier-api
+      - notification-api
     logging:
       driver: "json-file"
       options:
@@ -215,18 +174,10 @@ services:
       - LOG_LEVEL=info
       - ACCOUNT_API_URL=http://account-api:8082
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.13
+      - coachify_net
     pull_policy: always
     depends_on:
-      account-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - account-api
     logging:
       driver: "json-file"
       options:
@@ -256,22 +207,12 @@ services:
       - NOTIFICATION_API_URL=http://notification-api:8081
       - ACCOUNT_API_URL=http://account-api:8082
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.14
+      - coachify_net
     pull_policy: always
     depends_on:
-      identifier-api:
-        condition: service_healthy
-      notification-api:
-        condition: service_healthy
-      account-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - identifier-api
+      - notification-api
+      - account-api
     logging:
       driver: "json-file"
       options:
@@ -302,22 +243,12 @@ services:
       - ACCOUNT_API_URL=http://account-api:8082
       - CHAT_API_URL=http://chat-api:8083
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.15
+      - coachify_net
     pull_policy: always
     depends_on:
-      identifier-api:
-        condition: service_healthy
-      notification-api:
-        condition: service_healthy
-      account-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - identifier-api
+      - notification-api
+      - account-api
     logging:
       driver: "json-file"
       options:
@@ -345,15 +276,8 @@ services:
       - LOG_LEVEL=info
       - ACCOUNT_API_URL=http://account-api:8082
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.16
+      - coachify_net
     pull_policy: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
     logging:
       driver: "json-file"
       options:
@@ -381,18 +305,10 @@ services:
       - LOG_LEVEL=info
       - IDENTIFIER_API_URL=http://identifier-api:8080
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.17
+      - coachify_net
     pull_policy: always
     depends_on:
-      identifier-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8087/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - identifier-api
     logging:
       driver: "json-file"
       options:
@@ -422,20 +338,11 @@ services:
       - WORKOUT_MANAGEMENT_URL=http://workout-api:8087
       - ACCOUNT_API_URL=http://account-api:8082
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.18
+      - coachify_net
     pull_policy: always
     depends_on:
-      identifier-api:
-        condition: service_healthy
-      workout-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - identifier-api
+      - workout-api
     logging:
       driver: "json-file"
       options:
@@ -464,18 +371,10 @@ services:
       - IDENTIFIER_API_URL=http://identifier-api:8080
       - WORKOUT_MANAGEMENT_URL=http://workout-api:8087
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.19
+      - coachify_net
     pull_policy: always
     depends_on:
-      identifier-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8089/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 25s
+      - identifier-api
     logging:
       driver: "json-file"
       options:
@@ -501,9 +400,43 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
+    environment:
+      - .env.production
+      - NODE_ENV=production
+      - NEXT_PUBLIC_USE_PROXY=true
+      # Auth configuration
+      # - NEXTAUTH_URL=${NEXTAUTH_URL}
+      # - AUTH_SECRET=${AUTH_SECRET}
+      # - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      # - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      
+      # # Internal backend service URLs (for server-side proxy)
+      - ACCOUNT_API_URL=http://account-api:8082
+      - CHAT_API_BASE_URL=http://chat-api:8083
+      - WORKOUT_API_URL=http://workout-api:8087
+      - INVITATION_API_URL=http://invitation-api:8085
+      - STATISTICS_API_URL=http://statistics-api:8089
+      - TRACKER_API_URL=http://tracker-api:8088
+      - CONTENT_API_URL=http://content-api:8084
+      - PAYMENT_API_URL=http://payments-api:8086
+      
+      # # Client-side API base URLs (these point to external domain)
+      # - NEXT_PUBLIC_ACCOUNT_API_BASE_URL=${NEXT_PUBLIC_ACCOUNT_API_BASE_URL}
+      # - NEXT_PUBLIC_CHAT_API_BASE_URL=${NEXT_PUBLIC_CHAT_API_BASE_URL}
+      # - NEXT_PUBLIC_WORKOUT_API_BASE_URL=${NEXT_PUBLIC_WORKOUT_API_BASE_URL}
+      # - NEXT_PUBLIC_PAYMENT_API_BASE_URL=${NEXT_PUBLIC_PAYMENT_API_BASE_URL}
+      # - NEXT_PUBLIC_INVITATION_API_BASE_URL=${NEXT_PUBLIC_INVITATION_API_BASE_URL}
+      # - NEXT_PUBLIC_TRACKER_API_BASE_URL=${NEXT_PUBLIC_TRACKER_API_BASE_URL}
+      # - NEXT_PUBLIC_STATISTICS_API_BASE_URL=${NEXT_PUBLIC_STATISTICS_API_BASE_URL}
+      # - NEXT_PUBLIC_BLOG_API_BASE_URL=${NEXT_PUBLIC_BLOG_API_BASE_URL}
+      
+      # # Other services
+      # - NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=${NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}
+      # - NEXT_PUBLIC_CLOUDINARY_API_KEY=${NEXT_PUBLIC_CLOUDINARY_API_KEY}
+      # - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      # - NEXT_PUBLIC_ABLY_KEY=${NEXT_PUBLIC_ABLY_KEY}
     networks:
-      coachify_net:
-        ipv4_address: 172.28.0.20
+      - coachify_net
     pull_policy: always
     depends_on:
       - identifier-api
@@ -517,9 +450,9 @@ services:
       - tracker-api
       - statistics-api
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/auth/session"]
+      interval: 10s
+      timeout: 5s
       retries: 3
       start_period: 40s
     logging:
@@ -532,7 +465,7 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 1G
+          memory: 2G
         reservations:
           cpus: '0.5'
-          memory: 512M
+          memory: 1G

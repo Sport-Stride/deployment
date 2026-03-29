@@ -1,0 +1,71 @@
+# AlertManager configuration for Coachify Platform
+# Routes alerts to various channels (email, Slack, PagerDuty, etc.)
+
+global:
+  resolve_timeout: 5m
+  # SMTP configuration for email alerts (optional)
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_from: 'alerts@coachify.training'
+
+# Default receiver if no routes match
+receivers:
+  - name: 'default'
+    # Uncomment for email alerts
+    # email_configs:
+    #   - to: 'devops-team@coachify.training'
+    #     headers:
+    #       Subject: '[Coachify Alert] {{ .GroupLabels.alertname }}'
+
+  - name: 'critical'
+    # Email for critical alerts
+    # email_configs:
+    #   - to: 'critical-alerts@coachify.training'
+    # Slack webhook for critical alerts (optional)
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#critical-alerts'
+    #     title: 'Critical Alert'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  - name: 'warning'
+    # Optional: Send warnings to a separate channel/email
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL_WARNINGS}'
+    #     channel: '#alerts-warnings'
+
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  # Route critical alerts to critical receiver
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical'
+      group_wait: 0s
+      repeat_interval: 1h
+
+    - match:
+        severity: warning
+      receiver: 'warning'
+      group_wait: 30s
+      repeat_interval: 4h
+
+# Inhibit rules: prevent firing of less severe alerts if more severe ones are already firing
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
+
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'service']

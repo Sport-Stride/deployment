@@ -96,7 +96,7 @@ scrape_configs:
     scrape_interval: 10s
 
   - job_name: 'workout-api'
-    metrics_path: '/prometheus'
+    metrics_path: '/api/metrics'
     static_configs:
       - targets: ['workout-api:8087']
         labels:
@@ -114,7 +114,7 @@ scrape_configs:
     scrape_interval: 10s
 
   - job_name: 'statistics-api'
-    metrics_path: '/metrics'
+    metrics_path: '/api/metrics'
     static_configs:
       - targets: ['statistics-api:8089']
         labels:
@@ -122,14 +122,14 @@ scrape_configs:
           tier: 'analytics'
     scrape_interval: 10s
 
-  # Docker daemon metrics (requires docker socket volume)
-  - job_name: 'docker'
-    static_configs:
-      - targets: ['unix:///var/run/docker.sock']
-    relabel_configs:
-      - source_labels: [__scheme__]
-        target_label: __scheme__
-        replacement: unix
+  # # Docker daemon metrics (requires docker socket volume)
+  # - job_name: 'docker'
+  #   static_configs:
+  #     - targets: ['unix:///var/run/docker.sock']
+  #   relabel_configs:
+  #     - source_labels: [__scheme__]
+  #       target_label: __scheme__
+  #       replacement: unix
 
   # Nginx reverse proxy metrics (if using prometheus-nginx-module)
   # Uncomment once nginx is configured with prometheus module

@@ -122,10 +122,25 @@ run_health_checks() {
 # Cleanup old images
 cleanup_images() {
   log "🧹 CLEANUP" "Pruning unused Docker images..."
-  docker image prune -f --filter "until=72h" > /dev/null 2>&1 || true
-  log "✅ CLEANUP" "Pruned old images"
+  
+  # Remove ALL dangling images immediately (no time filter)
+  docker image prune -f > /dev/null 2>&1 || true
+  
+  # Also remove old images by the project label if you label them
+  # docker image prune -f --filter "label=com.docker.compose.project=coachify" 
+  
+  # Show reclaimed space
+  RECLAIMED=$(docker system df --format "{{.ReclaimableSize}}" 2>/dev/null || echo "unknown")
+  log "✅ CLEANUP" "Pruned old images. Reclaimable space remaining: $RECLAIMED"
 }
 
+
+post_deploy_report() {
+  log "📊 DISK" "Docker disk usage after deployment:"
+  docker system df | while IFS= read -r line; do
+    log "   " "$line"
+  done
+}
 # Main deployment flow
 main() {
   log "🎯 START" "=========================================="
@@ -148,7 +163,7 @@ main() {
   wait_for_stability
   run_health_checks
   cleanup_images
-  
+  post_deploy_report
   log "✅ SUCCESS" "=========================================="
   log "✅ SUCCESS" "Deployment completed successfully!"
   log "✅ SUCCESS" "=========================================="

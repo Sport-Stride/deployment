@@ -26,6 +26,9 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.min-block-duration=2h'   # flush to disk sooner
+      - '--storage.tsdb.max-block-duration=2h'   # keep blocks small
+      - '--query.max-concurrency=4'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     networks:

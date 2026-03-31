@@ -1,0 +1,5 @@
+# After finishing any significant feature, open Copilot Chat and run:
+
+@workspace I just implemented [feature name] in [service name].
+Review what I built and suggest any updates needed to the CLAUDE.md 
+for this service to reflect the new patterns or changes introduced.

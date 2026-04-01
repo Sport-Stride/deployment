@@ -179,14 +179,18 @@ services:
       - MONGODB_URI=${MONGODB_URI}
       - ENVIRONMENT=production
       - LOG_LEVEL=info
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=identifier-api,env=production"
     deploy:
       resources:
@@ -208,14 +212,18 @@ services:
       - PORT=8081
       - ENVIRONMENT=production
       - LOG_LEVEL=info
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=notification-api,env=production"
     deploy:
       resources:
@@ -240,6 +248,10 @@ services:
       - NOTIFICATION_API_URL=http://notification-api:8081
       - INVITATION_API_URL=http://invitation-api:8085
       - PAYMENT_API_URL=http://payments-api:8086
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
@@ -249,8 +261,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=account-api,env=production"
     deploy:
       resources:
@@ -272,6 +284,10 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
       - ACCOUNT_API_URL=http://account-api:8082
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
@@ -280,8 +296,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=chat-api,env=production"
     deploy:
       resources:
@@ -312,11 +328,15 @@ services:
       - identifier-api
       - notification-api
       - account-api
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=content-api,env=production"
     deploy:
       resources:
@@ -341,6 +361,10 @@ services:
       - NOTIFICATION_API_URL=http://notification-api:8081
       - ACCOUNT_API_URL=http://account-api:8082
       - CHAT_API_URL=http://chat-api:8083
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
@@ -351,8 +375,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=invitation-api,env=production"
     deploy:
       resources:
@@ -374,14 +398,18 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
       - ACCOUNT_API_URL=http://account-api:8082
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=payments-api,env=production"
     deploy:
       resources:
@@ -403,6 +431,10 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
       - IDENTIFIER_API_URL=http://identifier-api:8080
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
@@ -411,8 +443,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=workout-api,env=production"
     deploy:
       resources:
@@ -436,6 +468,10 @@ services:
       - IDENTIFIER_API_URL=http://identifier-api:8080
       - WORKOUT_MANAGEMENT_URL=http://workout-api:8087
       - ACCOUNT_API_URL=http://account-api:8082
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
@@ -445,8 +481,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=tracker-api,env=production"
     deploy:
       resources:
@@ -469,6 +505,10 @@ services:
       - LOG_LEVEL=info
       - IDENTIFIER_API_URL=http://identifier-api:8080
       - WORKOUT_MANAGEMENT_URL=http://workout-api:8087
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
     networks:
       - coachify_net
     pull_policy: always
@@ -477,8 +517,8 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
         labels: "service=statistics-api,env=production"
     deploy:
       resources:

@@ -1,0 +1,99 @@
+# docker-compose.loki.yml
+# Loki + Promtail Log Aggregation Stack for Coachify Platform
+#
+# Deploy alongside prod and monitoring stacks:
+# docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml -f docker-compose.loki.yml up -d
+#
+# Or alongside monitoring only (e.g. to test log ingestion):
+# docker compose -f docker-compose.monitoring.yml -f docker-compose.loki.yml up -d
+#
+# After deploying, restart Grafana to pick up the new Loki datasource and dashboard:
+# docker restart coachify-grafana
+#
+# Verify Loki is healthy:
+# curl http://localhost:3100/ready
+#
+# Verify alert rules were loaded by the Loki ruler:
+# curl http://localhost:3100/loki/api/v1/rules | jq .
+
+services:
+  # ===========================================
+  # Loki - Log aggregation & storage
+  # ===========================================
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: coachify-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - ./monitoring/loki/rules:/loki/rules
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - coachify_net
+    environment:
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ===========================================
+  # Promtail - Log collection agent
+  # Discovers containers with label: logging=promtail
+  # ===========================================
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: coachify-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yaml
+    networks:
+      - coachify_net
+    depends_on:
+      loki:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  loki_data:
+    driver: local
+
+networks:
+  coachify_net:
+    # Must match the network created by docker-compose.prod.yml
+    # Confirmed via: docker network ls | grep coachify -> coachify_coachify_net
+    name: coachify_coachify_net
+    external: true

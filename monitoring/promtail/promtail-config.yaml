@@ -1,0 +1,83 @@
+# Promtail configuration for Coachify Platform
+# Discovers all 10 Coachify API containers via Docker socket.
+# Only containers with Docker label "logging=promtail" are scraped.
+# Parses JSON logs, promotes level + status as Loki index labels.
+# Drops health-check, metrics, and favicon probe noise before pushing to Loki.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://coachify-loki:3100/loki/api/v1/push
+    tenant_id: fake
+
+scrape_configs:
+  - job_name: coachify-backend-apis
+
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          # Only scrape containers explicitly opted-in for log collection
+          - name: label
+            values: ["logging=promtail"]
+
+    relabel_configs:
+      # Extract the container name (strip leading '/') → label 'service'
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.*)"
+        target_label: service
+
+      # Expose the Docker Compose service name as 'compose_service'
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: compose_service
+
+      # Expose the 'env' Docker label (set to 'production' on all API containers)
+      - source_labels: [__meta_docker_container_label_env]
+        target_label: env
+
+      # Keep the standard Promtail log path
+      - source_labels: [__meta_docker_container_log_stream]
+        target_label: stream
+
+    pipeline_stages:
+      # The Go/Zap logger emits console-encoded lines in this tab-separated format:
+      # TIMESTAMP\tLEVEL\tCALLER\tMESSAGE\t{"status":200,"method":"GET",...}
+      # Step 1: extract the uppercase LEVEL and the trailing JSON blob via regex.
+      - regex:
+          expression: '^\S+\t(?P<raw_level>[A-Z]+)\t\S+\t[^\t]*\t(?P<json_blob>\{.+\})\s*$'
+
+      # Step 2: parse the extracted JSON blob for structured fields
+      - json:
+          source: json_blob
+          expressions:
+            status:  status
+            method:  method
+            path:    path
+            latency: latency
+            message: msg
+            error:   error
+
+      # Step 3: lowercase the Zap level (INFO→info, ERROR→error) and store as 'level'
+      - template:
+          source: level
+          template: '{{ .raw_level | ToLower }}'
+
+      # Promote 'level' and 'status' to Loki stream labels for fast filtering
+      - labels:
+          level:  ""
+          status: ""
+
+      # Add static labels that identify the log source
+      - static_labels:
+          job: coachify-backend-apis
+          platform: coachify
+
+      # Drop noisy health probes and metrics scrapes before pushing to Loki
+      - drop:
+          expression: '(^/health$|^/metrics$|^/api/metrics$|^/favicon\.ico$|^/ping$)'
+          source: path

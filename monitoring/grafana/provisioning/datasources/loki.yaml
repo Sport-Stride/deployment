@@ -1,0 +1,19 @@
+# Loki datasource provisioning for Grafana
+# Grafana auto-loads this file on restart — no manual datasource creation needed.
+# uid 'loki-ds' is referenced by the coachify-logs dashboard panels and template variables.
+# Do NOT set isDefault: true — Prometheus is the primary datasource.
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://coachify-loki:3100
+    uid: loki-ds
+    isDefault: false
+    jsonData:
+      maxLines: 5000
+      timeout: 60
+    version: 1
+    editable: true

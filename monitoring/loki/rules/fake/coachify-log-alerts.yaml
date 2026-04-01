@@ -1,0 +1,150 @@
+# LogQL alert rules for Coachify Platform — evaluated by the Loki ruler every 1m
+# Stored in the 'fake' tenant directory (auth_enabled: false → single tenant = fake)
+# All 10 services share these rules; the 'service' label (set by Promtail) differentiates them.
+# These rules complement the Prometheus metric alerts in monitoring/alerts.yml without duplicating them.
+# Alerts are routed to coachify-alertmanager:9093 (configured in loki-config.yaml ruler.alertmanager_url)
+
+groups:
+  - name: coachify-log-alerts
+    interval: 1m
+    rules:
+
+      # ─── Error Rate ──────────────────────────────────────────────────────────────
+      - alert: LogHighErrorRate
+        expr: |
+          sum by (service) (
+            count_over_time({job="coachify-backend-apis", level="error"}[5m])
+          ) > 10
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          component: logs
+        annotations:
+          summary: "High ERROR log rate on {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} logged more than 10 ERROR lines in 5 minutes.
+            Check Grafana: http://localhost:3001
+
+      # ─── HTTP 5xx Spike ──────────────────────────────────────────────────────────
+      # status is extracted as a string label by Promtail — use regex, not numeric compare
+      - alert: LogHTTP5xxSpike
+        expr: |
+          sum by (service) (
+            count_over_time({job="coachify-backend-apis"} | status =~ "5.." [5m])
+          ) > 5
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          component: logs
+        annotations:
+          summary: "HTTP 5xx spike in logs on {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} logged more than 5 HTTP 5xx responses in 5 minutes.
+
+      # ─── Go Panic Detection ───────────────────────────────────────────────────────
+      - alert: LogPanicDetected
+        expr: |
+          sum by (service) (
+            count_over_time({job="coachify-backend-apis"} |~ "(?i)panic" [2m])
+          ) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: backend
+          component: logs
+        annotations:
+          summary: "PANIC detected in {{ $labels.service }}"
+          description: >
+            A Go panic was detected in service {{ $labels.service }}.
+            The process may have crashed or auto-recovered via Gin's recovery middleware.
+
+      # ─── Database / Network Connectivity ─────────────────────────────────────────
+      # Matches MongoDB-specific patterns ('mongo', 'no reachable servers') and general
+      # network failures observed across the Coachify stack.
+      - alert: LogDatabaseConnectionError
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis"} |~
+              "(connection refused|dial tcp|context deadline exceeded|mongo|no reachable servers)"
+              [5m]
+            )
+          ) > 3
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          component: database
+        annotations:
+          summary: "Database/network errors in {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} is logging repeated connection failures.
+            Check MongoDB availability and downstream service health.
+
+      # ─── Payments API — Strict Error Threshold ────────────────────────────────────
+      # payments-api is tier=critical: threshold is >2 vs the general >10 above.
+      - alert: LogPaymentsError
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis", service="coachify-payments-api", level="error"}[5m]
+            )
+          ) > 2
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          component: payments
+        annotations:
+          summary: "Payment errors detected in payments-api logs"
+          description: >
+            coachify-payments-api has logged more than 2 errors in 5 minutes.
+            Immediate review required — financial transactions may be affected.
+
+      # ─── Authentication Spike (brute-force detection) ────────────────────────────
+      # status is a Loki stream label (set by Promtail) — filter directly, no | json needed
+      - alert: LogUnauthorizedSpike
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis", status=~"401|403"}
+              [5m]
+            )
+          ) > 20
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+          component: security
+        annotations:
+          summary: "Auth spike (401/403) on {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} has seen more than 20 unauthorized responses in 5 minutes.
+            Possible brute-force attack or misconfigured API client.
+
+      # ─── Slow Requests ───────────────────────────────────────────────────────────
+      # latency uses Go's time.Duration.String() format:
+      #   milliseconds → "7.084ms"  (no alert)
+      #   seconds      → "5.123s"   (alert if >= 5s)
+      #   minutes      → "1m2.3s"   (always alert)
+      # Regex matches: 5s-9s, 10s+, any minutes range. No trailing | this time.
+      - alert: LogSlowRequests
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis"} |~ "\"latency\": \"([5-9][0-9]*\\.[0-9]+s|[0-9]{2,}[.][0-9]*s|[0-9]+m[0-9])"
+              [10m]
+            )
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          component: performance
+        annotations:
+          summary: "Slow requests in {{ $labels.service }} logs"
+          description: >
+            Service {{ $labels.service }} has logged more than 5 requests with latency > 5s
+            in the last 10 minutes. Check MongoDB query performance and downstream dependencies.

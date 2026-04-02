@@ -1,5 +1,18 @@
 # Coachify Deployment Repository - CLAUDE.md
 
+## Developer Notes
+
+### Things that have caused bugs before
+- **`versions.env` out of sync** — If a deploy fails mid-way, `versions.env` may have the new SHA but the old container is still running. Always check `docker ps` on the VPS after a failed deploy.
+- **Nginx config reload vs restart** — Use `nginx -s reload` (graceful) not `systemctl restart nginx` (drops connections). The deploy script handles this correctly — don't change it.
+- **Docker image pull rate limits** — GHCR has rate limits for unauthenticated pulls. The VPS must be authenticated to GHCR via `docker login ghcr.io`.
+- **SSL certificate renewal** — Let's Encrypt certs auto-renew via certbot cron. If the cron job breaks silently, certs expire and all HTTPS traffic fails.
+
+### How to think about changes here
+- The deploy workflow is triggered automatically by `repository_dispatch` events from service repos. Manual deploys use `workflow_dispatch`.
+- Each service is independently deployable — updating one service doesn't redeploy others.
+- The monitoring stack (Prometheus + Grafana + AlertManager) is deployed alongside services but updated separately.
+
 ## 1. WHAT THIS REPOSITORY DOES
 
 ### Primary Responsibility

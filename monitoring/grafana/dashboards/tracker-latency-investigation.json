@@ -307,6 +307,77 @@
           }
         }
       }
+    },
+    {
+      "title": "Identifiers-API Fallback Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        {
+          "expr": "sum(rate(tracker_external_call_duration_seconds_count{target_service=\"identifiers-api\", status=\"fallback\"}[5m]))",
+          "legendFormat": "identifiers-api fallback/s",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(tracker_external_call_duration_seconds_count{target_service=\"identifiers-api\", status=\"success\"}[5m]))",
+          "legendFormat": "identifiers-api success/s",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "scheme"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Consumer Timeout Events",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        {
+          "expr": "sum(increase(tracker_consumer_processing_duration_seconds_count{status=\"timeout\"}[1h]))",
+          "legendFormat": "Timeouts (1h)",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(tracker_consumer_processing_duration_seconds_count{status=\"insert_failed\"}[1h]))",
+          "legendFormat": "Insert Failures (1h)",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(increase(tracker_external_call_duration_seconds_count{status=\"fallback\"}[1h]))",
+          "legendFormat": "ID Fallbacks (1h)",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
     }
   ],
   "schemaVersion": 39,

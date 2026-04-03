@@ -105,7 +105,7 @@ scrape_configs:
     scrape_interval: 10s
 
   - job_name: 'tracker-api'
-    metrics_path: '/metrics'
+    metrics_path: '/api/metrics'
     static_configs:
       - targets: ['tracker-api:8088']
         labels:

@@ -98,6 +98,107 @@ groups:
           summary: "Low disk space on {{ $labels.device }}"
           description: "Less than 10% disk space available"
 
+  # ============================================================
+  # Tracker API — Consumer & Latency Investigation Alerts
+  # ============================================================
+  - name: tracker_api_investigation
+    interval: 15s
+    rules:
+      # 1. Consumer processing exceeds 500ms P95
+      - alert: TrackerConsumerSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(tracker_consumer_processing_duration_seconds_bucket{queue=~".*"}[5m])) by (queue, le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: tracker-consumer
+        annotations:
+          summary: "Tracker consumer processing slow on queue {{ $labels.queue }}"
+          description: "Consumer P95 processing time is {{ $value }}s — check MongoDB query performance and external service call latency"
+
+      # 2. Consumer hitting timeout ceiling (~10s)
+      - alert: TrackerConsumerTimeout
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(tracker_consumer_processing_duration_seconds_bucket{queue=~".*"}[5m])) by (queue, le)
+          ) > 9
+        for: 1m
+        labels:
+          severity: critical
+          component: tracker-consumer
+        annotations:
+          summary: "Tracker consumer hitting timeout ceiling on queue {{ $labels.queue }}"
+          description: "Consumer P95 is {{ $value }}s — likely MongoDB query with no index or external service not responding"
+
+      # 3. Tracker API HTTP P95 exceeds 1s
+      - alert: TrackerApiP95LatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(gin_request_duration_seconds_bucket{job="tracker-api"}[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: tracker-http
+        annotations:
+          summary: "tracker-api HTTP P95 exceeds 1s"
+          description: "P95 latency is {{ $value }}s — correlate with consumer slow alert and RabbitMQ queue depth"
+
+      # 4. RabbitMQ queue backing up
+      - alert: TrackerQueueGrowing
+        expr: tracker_rabbitmq_queue_depth{queue=~"tracker-events|statistics|assignment"} > 100
+        for: 3m
+        labels:
+          severity: warning
+          component: tracker-rabbitmq
+        annotations:
+          summary: "Tracker queue {{ $labels.queue }} backing up ({{ $value }} messages)"
+          description: "Consumer is slower than producer — check prefetch count and worker concurrency"
+
+      # 5. PublishAndConsume taking too long (the main HTTP saga path)
+      - alert: TrackerPublishAndConsumeSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(tracker_publish_and_consume_duration_seconds_bucket{phase="publish_ok"}[5m])) by (queue, le)
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: tracker-saga
+        annotations:
+          summary: "RabbitMQ publish phase taking >500ms on queue {{ $labels.queue }}"
+          description: "P95 publish latency is {{ $value }}s — RabbitMQ may be experiencing connection issues or retries"
+
+      # 6. External service call latency from tracker-api
+      - alert: TrackerExternalCallSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target_service, le)
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: tracker-external
+        annotations:
+          summary: "tracker-api external call to {{ $labels.target_service }} exceeding 500ms"
+          description: "P95 is {{ $value }}s — this compounds directly into saga/handler processing time"
+
+      # 7. Saga step duration too high
+      - alert: TrackerSagaStepSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(tracker_saga_step_duration_seconds_bucket[5m])) by (step, le)
+          ) > 2
+        for: 3m
+        labels:
+          severity: warning
+          component: tracker-saga
+        annotations:
+          summary: "Saga step {{ $labels.step }} P95 exceeds 2s"
+          description: "Step P95 is {{ $value }}s — this step is the bottleneck in the HTTP handler chain"
+
       # Container restart alert
       - alert: ContainerFrequentlyRestarting
         expr: |

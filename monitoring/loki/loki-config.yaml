@@ -61,7 +61,7 @@ ruler:
       store: inmemory
   enable_api: true
   enable_alertmanager_v2: true
-  evaluation_interval: 1m
+  evaluation_interval: 15s
   poll_interval: 1m
   # Deep-links in alert bodies resolve to Grafana on port 3001
   external_url: http://localhost:3001

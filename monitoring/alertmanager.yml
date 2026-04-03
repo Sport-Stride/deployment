@@ -7,8 +7,27 @@ global:
   smtp_smarthost: 'smtp.gmail.com:587'
   smtp_require_tls: true
   smtp_auth_username: 'sportstride727@gmail.com'
-  smtp_auth_password: 'jdbelbqcsdvfvixv'
+  smtp_auth_password: 'xgkhmltqwpailcvg'
   smtp_from: 'sportstride727@gmail.com'
+
+# Alert grouping — reduce latency by batching quickly
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'service']
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 12h
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical'
+      group_wait: 0s
+      repeat_interval: 1h
+    - match:
+        severity: warning
+      receiver: 'warning'
+      group_wait: 10s
+      repeat_interval: 4h
 
 # Default receiver if no routes match
 receivers:
@@ -54,9 +73,9 @@ receivers:
 
 route:
   receiver: 'default'
-  group_by: ['alertname', 'cluster', 'service']
-  group_wait: 10s
-  group_interval: 10s
+  group_by: ['alertname', 'service']
+  group_wait: 5s
+  group_interval: 30s
   repeat_interval: 12h
 
   # Route critical alerts to critical receiver
@@ -70,7 +89,7 @@ route:
     - match:
         severity: warning
       receiver: 'warning'
-      group_wait: 30s
+      group_wait: 5s
       repeat_interval: 4h
 
 # Inhibit rules: prevent firing of less severe alerts if more severe ones are already firing

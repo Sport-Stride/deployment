@@ -15,7 +15,7 @@ groups:
           sum by (service) (
             count_over_time({job="coachify-backend-apis", level="error"}[5m])
           ) > 10
-        for: 2m
+        for: 1m
         labels:
           severity: critical
           team: backend
@@ -113,7 +113,7 @@ groups:
               [5m]
             )
           ) > 20
-        for: 2m
+        for: 1m
         labels:
           severity: warning
           team: backend

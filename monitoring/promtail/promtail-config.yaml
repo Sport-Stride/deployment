@@ -81,3 +81,101 @@ scrape_configs:
       - drop:
           expression: '(^/health$|^/metrics$|^/api/metrics$|^/favicon\.ico$|^/ping$)'
           source: path
+
+  # =====================================================
+  # Nginx JSON Access Log — client IP tracking
+  # Reads access_json.log from the nginx_logs volume mounted at /var/log/nginx
+  # Fields: time, remote_addr, client_ip (X-Forwarded-For), real_ip, method,
+  #         path, status, bytes, duration, upstream, agent, host
+  # =====================================================
+  - job_name: coachify-nginx-access
+
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: coachify-nginx-access
+          service: coachify-nginx-proxy
+          env: production
+          platform: coachify
+          __path__: /var/log/nginx/access_json.log
+
+    pipeline_stages:
+      # Parse every field from the JSON access log line
+      - json:
+          expressions:
+            timestamp:  time
+            remote_addr: remote_addr
+            client_ip:  client_ip
+            real_ip:    real_ip
+            method:     method
+            path:       path
+            status:     status
+            duration:   duration
+            upstream:   upstream
+            agent:      agent
+
+      # Promote the most-queried fields as Loki stream labels
+      - labels:
+          status:    ""
+          method:    ""
+          client_ip: ""
+
+      - static_labels:
+          job: coachify-nginx-access
+          platform: coachify
+
+      # Drop static assets and infrastructure noise
+      - drop:
+          expression: '^/_next/static|^/favicon\.ico$|^/health$|^/metrics$'
+          source: path
+
+  # =====================================================
+  # Nginx Error Log
+  # =====================================================
+  - job_name: coachify-nginx-errors
+
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: coachify-nginx-errors
+          service: coachify-nginx-proxy
+          level: error
+          env: production
+          platform: coachify
+          __path__: /var/log/nginx/error.log
+
+    pipeline_stages:
+      - static_labels:
+          job: coachify-nginx-errors
+          platform: coachify
+
+  # =====================================================
+  # Next.js Frontend Container Stdout Logs
+  # Discovered via Docker socket; container must have label service=coachify-frontend
+  # =====================================================
+  - job_name: coachify-frontend
+
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          - name: label
+            values: ["service=coachify-frontend"]
+
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        regex: "/(.*)"
+        target_label: service
+
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: compose_service
+
+      - source_labels: [__meta_docker_container_label_env]
+        target_label: env
+
+    pipeline_stages:
+      - static_labels:
+          job: coachify-frontend
+          platform: coachify

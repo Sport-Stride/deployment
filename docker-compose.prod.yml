@@ -51,6 +51,10 @@ services:
       - workout-api
       - tracker-api
       - statistics-api
+    labels:
+      - service=coachify-nginx-proxy
+      - env=production
+      - platform=coachify
     logging:
       driver: "json-file"
       options:
@@ -114,6 +118,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+    labels:
+      - service=coachify-frontend
+      - logging=promtail
+      - env=production
+      - platform=coachify
     logging:
       driver: "json-file"
       options:

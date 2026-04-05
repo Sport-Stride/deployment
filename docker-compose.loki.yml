@@ -67,6 +67,7 @@ services:
       - ./monitoring/promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - nginx_logs:/var/log/nginx:ro
     command: -config.file=/etc/promtail/config.yaml
     networks:
       - coachify_net
@@ -90,6 +91,9 @@ services:
 volumes:
   loki_data:
     driver: local
+  nginx_logs:
+    name: coachify_nginx_logs
+    external: true
 
 networks:
   coachify_net:

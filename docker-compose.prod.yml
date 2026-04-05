@@ -24,6 +24,11 @@ services:
     image: nginx:1.25-alpine
     container_name: coachify-nginx-proxy
     restart: always
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        touch /var/log/nginx/access_json.log /var/log/nginx/error.log
+        exec nginx -g 'daemon off;'
     ports:
       - "80:80"
       - "443:443"

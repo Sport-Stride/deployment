@@ -19,9 +19,9 @@ groups:
       - alert: HighErrorRate
         expr: |
           (
-            sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+            sum(rate(gin_requests_total{code=~"5.."}[5m])) by (job)
             /
-            sum(rate(http_requests_total[5m])) by (job)
+            sum(rate(gin_requests_total[5m])) by (job)
           ) > 0.05
         for: 5m
         labels:
@@ -175,14 +175,14 @@ groups:
       - alert: TrackerExternalCallSlow
         expr: |
           histogram_quantile(0.95,
-            sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target_service, le)
+            sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target, le)
           ) > 0.5
         for: 3m
         labels:
           severity: warning
           component: tracker-external
         annotations:
-          summary: "tracker-api external call to {{ $labels.target_service }} exceeding 500ms"
+          summary: "tracker-api external call to {{ $labels.target }} exceeding 500ms"
           description: "P95 is {{ $value }}s — this compounds directly into saga/handler processing time"
 
       # 7. Saga step duration too high
@@ -209,3 +209,82 @@ groups:
         annotations:
           summary: "Container {{ $labels.name }} is restarting frequently"
           description: "{{ $labels.name }} restarted {{ $value }} times in 15 minutes"
+
+  # ─── Statistics API ─────────────────────────────────────────────────────────────
+  # Uses metrics exported by coachify-statistics-api/utils/metrics.go
+  - name: statistics_api_alerts
+    interval: 30s
+    rules:
+
+      # Consumer processing is slow — event backlog risk
+      - alert: StatisticsConsumerSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(statistics_consumer_processing_duration_seconds_bucket{status="success"}[5m])) by (queue, le)
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          service: statistics-api
+          component: consumer
+        annotations:
+          summary: "Statistics consumer on {{ $labels.queue }} P95 > 500ms"
+          description: "Consumer P95 is {{ $value }}s. Event handler may be slow or MongoDB write is backing up."
+
+      # Event handler error rate spiking by action type
+      - alert: StatisticsEventHandlerErrorRate
+        expr: |
+          sum(rate(statistics_event_handler_duration_seconds_count{status="error"}[5m])) by (service, action)
+          > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: statistics-api
+          component: event-handler
+        annotations:
+          summary: "Statistics event handler errors: {{ $labels.service }}/{{ $labels.action }}"
+          description: "Error rate is {{ $value }} errors/s for {{ $labels.service }}.{{ $labels.action }}. Check MongoDB writes and event schema."
+
+      # DLQ receiving messages — dead letters indicate persistent processing failures
+      - alert: StatisticsDLQSpike
+        expr: |
+          increase(statistics_dlq_events_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: statistics-api
+          component: consumer
+        annotations:
+          summary: "Statistics DLQ received {{ $value }} messages on {{ $labels.queue }}"
+          description: "Messages are being dead-lettered — consumer could not ACK after all retries. Investigate consumer logs immediately."
+
+      # Queue depth building up — consumer falling behind the producer
+      - alert: StatisticsQueueBacked
+        expr: |
+          statistics_rabbitmq_queue_depth{queue=~"statistics|tracker-events"} > 200
+        for: 3m
+        labels:
+          severity: warning
+          service: statistics-api
+          component: rabbitmq
+        annotations:
+          summary: "Statistics queue {{ $labels.queue }} has {{ $value }} messages backed up"
+          description: "Consumer throughput is lower than producer rate. Check consumer concurrency and MongoDB write latency."
+
+  # ─── Tracker API — Notification Failures ────────────────────────────────────────
+  # Uses tracker_notification_failures_total counter added in utils/metrics.go
+  - name: tracker_notification_alerts
+    interval: 30s
+    rules:
+
+      - alert: TrackerNotificationFailureRate
+        expr: |
+          sum(rate(tracker_notification_failures_total[10m])) by (event_type) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: tracker-api
+          component: notification
+        annotations:
+          summary: "Tracker notification failures for {{ $labels.event_type }}"
+          description: "Notification failure rate is {{ $value }}/s for event '{{ $labels.event_type }}'. The notification goroutine is failing — check notification-api health and RabbitMQ connectivity."

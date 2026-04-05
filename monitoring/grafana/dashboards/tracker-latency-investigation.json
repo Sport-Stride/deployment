@@ -18,7 +18,7 @@
   "links": [],
   "panels": [
     {
-      "title": "Tracker API — HTTP P95 Latency",
+      "title": "Tracker API — HTTP P95 / P50 Latency",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
@@ -56,19 +56,19 @@
       }
     },
     {
-      "title": "Consumer Processing Duration P95",
+      "title": "Saga Step Duration P95",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(tracker_consumer_processing_duration_seconds_bucket[5m])) by (queue, le))",
-          "legendFormat": "Consumer P95 — {{queue}}",
+          "expr": "histogram_quantile(0.95, sum(rate(tracker_saga_step_duration_seconds_bucket[5m])) by (step, le))",
+          "legendFormat": "P95 — {{step}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.5, sum(rate(tracker_consumer_processing_duration_seconds_bucket[5m])) by (queue, le))",
-          "legendFormat": "Consumer P50 — {{queue}}",
+          "expr": "histogram_quantile(0.5, sum(rate(tracker_saga_step_duration_seconds_bucket[5m])) by (step, le))",
+          "legendFormat": "P50 — {{step}}",
           "refId": "B"
         }
       ],
@@ -86,8 +86,8 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.5 },
-              { "color": "red", "value": 5 }
+              { "color": "yellow", "value": 0.25 },
+              { "color": "red", "value": 1 }
             ]
           }
         }
@@ -100,13 +100,13 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "tracker_rabbitmq_queue_depth",
-          "legendFormat": "{{queue}} — ready",
+          "expr": "tracker_rabbitmq_queue_depth{queue=~\"tracker-events|assignment|eventsDLQ\"}",
+          "legendFormat": "{{queue}} ready",
           "refId": "A"
         },
         {
-          "expr": "tracker_rabbitmq_queue_unacked",
-          "legendFormat": "{{queue}} — unacked",
+          "expr": "tracker_rabbitmq_queue_unacked{queue=~\"tracker-events|assignment|eventsDLQ\"}",
+          "legendFormat": "{{queue}} unacked",
           "refId": "B"
         }
       ],
@@ -222,13 +222,13 @@
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target_service, le))",
-          "legendFormat": "P95 — {{target_service}}",
+          "expr": "histogram_quantile(0.95, sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target, le))",
+          "legendFormat": "P95 — {{target}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.5, sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target_service, le))",
-          "legendFormat": "P50 — {{target_service}}",
+          "expr": "histogram_quantile(0.5, sum(rate(tracker_external_call_duration_seconds_bucket[5m])) by (target, le))",
+          "legendFormat": "P50 — {{target}}",
           "refId": "B"
         }
       ],
@@ -253,76 +253,15 @@
       }
     },
     {
-      "title": "Saga Step Duration P95",
+      "title": "External Call Error Rate by target",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(tracker_saga_step_duration_seconds_bucket[5m])) by (step, le))",
-          "legendFormat": "P95 — {{step}}",
+          "expr": "sum(rate(tracker_external_call_duration_seconds_count{status=~\"error|timeout|circuit_open\"}[5m])) by (target, status)",
+          "legendFormat": "{{target}} — {{status}}",
           "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "drawStyle": "bars",
-            "lineWidth": 1,
-            "fillOpacity": 30,
-            "gradientMode": "scheme"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 5 }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "title": "Consumer Message Rate",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "targets": [
-        {
-          "expr": "sum(rate(tracker_consumer_processing_duration_seconds_count[5m])) by (queue, status)",
-          "legendFormat": "{{queue}} — {{status}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "gradientMode": "scheme"
-          }
-        }
-      }
-    },
-    {
-      "title": "Identifiers-API Fallback Rate",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "targets": [
-        {
-          "expr": "sum(rate(tracker_external_call_duration_seconds_count{target_service=\"identifiers-api\", status=\"fallback\"}[5m]))",
-          "legendFormat": "identifiers-api fallback/s",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(tracker_external_call_duration_seconds_count{target_service=\"identifiers-api\", status=\"success\"}[5m]))",
-          "legendFormat": "identifiers-api success/s",
-          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -332,51 +271,170 @@
             "drawStyle": "line",
             "lineWidth": 2,
             "fillOpacity": 15,
-            "gradientMode": "scheme"
+            "gradientMode": "scheme",
+            "thresholdsStyle": { "mode": "dashed" }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "red", "value": 0.1 }
+              { "color": "red", "value": 0.05 }
             ]
           }
         }
       }
     },
     {
-      "title": "Consumer Timeout Events",
+      "title": "Publish Failure Events (1h)",
       "type": "stat",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "targets": [
         {
-          "expr": "sum(increase(tracker_consumer_processing_duration_seconds_count{status=\"timeout\"}[1h]))",
-          "legendFormat": "Timeouts (1h)",
+          "expr": "sum(increase(tracker_publish_and_consume_duration_seconds_count{phase=\"publish_failed\"}[1h]))",
+          "legendFormat": "Publish Failures",
           "refId": "A"
         },
         {
-          "expr": "sum(increase(tracker_consumer_processing_duration_seconds_count{status=\"insert_failed\"}[1h]))",
-          "legendFormat": "Insert Failures (1h)",
+          "expr": "sum(increase(tracker_publish_and_consume_duration_seconds_count{phase=\"db_insert_failed\"}[1h]))",
+          "legendFormat": "DB Insert Failures",
           "refId": "B"
         },
         {
-          "expr": "sum(increase(tracker_external_call_duration_seconds_count{status=\"fallback\"}[1h]))",
-          "legendFormat": "ID Fallbacks (1h)",
+          "expr": "sum(increase(tracker_publish_and_consume_duration_seconds_count{phase=\"ctx_cancelled\"}[1h]))",
+          "legendFormat": "Ctx Cancelled",
           "refId": "C"
+        },
+        {
+          "expr": "sum(increase(tracker_external_call_duration_seconds_count{status=~\"error|timeout\"}[1h])) by (target)",
+          "legendFormat": "Ext Errors — {{target}}",
+          "refId": "D"
         }
       ],
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
               { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 10 }
+              { "color": "red", "value": 5 }
             ]
           }
         }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "title": "Tracker API — Current Gauges",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        {
+          "expr": "tracker_rabbitmq_queue_depth{queue=\"tracker-events\"}",
+          "legendFormat": "tracker-events depth",
+          "refId": "A"
+        },
+        {
+          "expr": "tracker_rabbitmq_queue_depth{queue=\"eventsDLQ\"}",
+          "legendFormat": "eventsDLQ depth",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tracker_saga_step_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "Saga P95",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tracker_publish_and_consume_duration_seconds_bucket{phase=\"publish_ok\"}[5m])) by (le))",
+          "legendFormat": "Publish P95",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tracker_publish_and_consume_duration_seconds_bucket{phase=\"db_insert_ok\"}[5m])) by (le))",
+          "legendFormat": "DB Insert P95",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(rate(gin_requests_total{job=\"tracker-api\"}[5m]))",
+          "legendFormat": "HTTP req/s",
+          "refId": "F"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*(P95)$" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 0.1 },
+                    { "color": "red", "value": 0.5 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*depth$" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 10 },
+                    { "color": "red", "value": 50 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "HTTP req/s" },
+            "properties": [
+              { "id": "unit", "value": "ops" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [{ "color": "blue", "value": null }]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
       }
     }
   ],
@@ -388,5 +446,5 @@
   "timezone": "browser",
   "title": "Tracker API — Latency Investigation",
   "uid": "tracker-latency-investigation",
-  "version": 1
+  "version": 2
 }

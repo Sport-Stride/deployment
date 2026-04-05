@@ -71,27 +71,6 @@ receivers:
         headers:
           Subject: '[COACHIFY WARNING] {{ .GroupLabels.alertname }} — {{ .GroupLabels.service }}'
 
-route:
-  receiver: 'default'
-  group_by: ['alertname', 'service']
-  group_wait: 5s
-  group_interval: 30s
-  repeat_interval: 12h
-
-  # Route critical alerts to critical receiver
-  routes:
-    - match:
-        severity: critical
-      receiver: 'critical'
-      group_wait: 0s
-      repeat_interval: 1h
-
-    - match:
-        severity: warning
-      receiver: 'warning'
-      group_wait: 5s
-      repeat_interval: 4h
-
 # Inhibit rules: prevent firing of less severe alerts if more severe ones are already firing
 inhibit_rules:
   - source_match:

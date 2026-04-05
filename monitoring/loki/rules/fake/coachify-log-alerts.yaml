@@ -148,3 +148,113 @@ groups:
           description: >
             Service {{ $labels.service }} has logged more than 5 requests with latency > 5s
             in the last 10 minutes. Check MongoDB query performance and downstream dependencies.
+
+      # ─── Context Canceled (async goroutine failures) ──────────────────────────────
+      # "context canceled" most commonly means a fire-and-forget goroutine inherited the request
+      # context which was cancelled when the HTTP handler returned its response.
+      # A spike here indicates goroutines are using request contexts instead of background contexts.
+      - alert: LogContextCanceled
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis"} |~ "context canceled"
+              [5m]
+            )
+          ) > 5
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+          component: async
+        annotations:
+          summary: "Context canceled errors spiking in {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} logged more than 5 'context canceled' errors in 5 minutes.
+            Likely cause: a goroutine is using the HTTP request context (cancelled on response write)
+            instead of context.Background(). Check async notification and event publish goroutines.
+
+      # ─── Notification Delivery Failures ──────────────────────────────────────────
+      # Catches failures in async notification goroutines (assignment assigned/deleted/updated).
+      # Complements the tracker_notification_failures_total Prometheus counter.
+      - alert: LogNotificationFailure
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis"} |~ "failed to send.*notification|failed to save notification"
+              [5m]
+            )
+          ) > 3
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+          component: notification
+        annotations:
+          summary: "Notification delivery failures in {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} has logged more than 3 notification failures in 5 minutes.
+            Check notification-api health and RabbitMQ connectivity.
+
+      # ─── Saga Rollback Detection ──────────────────────────────────────────────────
+      # A saga rollback means a multi-step operation partially failed and compensating
+      # transactions were triggered. Any rollback is worth investigating.
+      - alert: LogSagaRollback
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis"} |~ "rolling back.*step|saga.*rollback|rollback.*saga"
+              [10m]
+            )
+          ) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: backend
+          component: saga
+        annotations:
+          summary: "Saga rollback detected in {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} performed a saga rollback. A multi-step operation
+            partially failed and compensation was triggered. Check the full request trace for
+            the root cause step that triggered the rollback.
+
+      # ─── RabbitMQ Reconnect / Disconnect ─────────────────────────────────────────
+      # RabbitMQ reconnection events indicate network instability or broker restarts.
+      # Frequent reconnects cause consumer gaps and can lead to missed events / DLQ accumulation.
+      - alert: LogRabbitMQReconnect
+        expr: |
+          sum by (service) (
+            count_over_time(
+              {job="coachify-backend-apis"} |~ "(?i)(rabbitmq.*disconnect|amqp.*closed|connection.*closed|reconnect.*amqp|exception.*amqp)"
+              [5m]
+            )
+          ) > 3
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+          component: rabbitmq
+        annotations:
+          summary: "RabbitMQ connection instability in {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} logged more than 3 RabbitMQ connection events in 5 minutes.
+            This may cause consumer gaps. Check RabbitMQ broker health and network stability.
+
+      # ─── WARN Level Spike ────────────────────────────────────────────────────────
+      # A sudden spike in WARN logs often precedes an ERROR or outage.
+      # This rule provides an early-warning signal before errors fully materialize.
+      - alert: LogWarnSpike
+        expr: |
+          sum by (service) (
+            count_over_time({job="coachify-backend-apis", level="warn"}[5m])
+          ) > 30
+        for: 2m
+        labels:
+          severity: info
+          team: backend
+          component: logs
+        annotations:
+          summary: "WARN log spike in {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} logged more than 30 WARN lines in 5 minutes.
+            This may be a leading indicator of failures. Review recent warnings before they escalate.

@@ -129,43 +129,12 @@ http {
         ~*netcraft       1;
         ~*wpscan         1;
         ~*httprobe       1;
-        # Go HTTP client (used by DNS rebinding probes & scanners)
-        "Go-http-client/1.1"  1;
-        "Go-http-client/2.0"  1;
-    }
-
-    # [HARDENED] Exempt Docker-internal source IPs from bad_bot blocking.
-    # Services inside the coachify_net bridge use Go's default HTTP client
-    # and would otherwise be blocked when calling any nginx-fronted endpoint.
-    geo $internal_docker {
-        default          0;
-        127.0.0.1        1;   # loopback
-        10.0.0.0/8       1;   # Docker overlay / private
-        172.16.0.0/12    1;   # Docker bridge networks (covers 172.17.x.x … 172.31.x.x)
-        192.168.0.0/16   1;   # host-mode containers / VPN
-    }
-
-    # Combined signal: bad bot AND not from an internal Docker IP → block
-    map $bad_bot$internal_docker $block_bot {
-        default  0;
-        "10"     1;   # bad_bot=1, internal_docker=0 → block
     }
 
     # [HARDENED] Empty User-Agent detection
     map $http_user_agent $empty_ua {
         default 0;
         ""      1;
-    }
-
-    # [HARDENED] SSRF & DNS rebinding probe detection (query string)
-    map $args $block_ssrf {
-        default     0;
-        ~*dnsmeasure  1;
-        ~*1u\.ms      1;
-        ~*rbndr\.us   1;
-        ~*nip\.io     1;
-        ~*rebind      1;
-        ~*169\.254    1;
     }
 
     # ===========================================
@@ -242,14 +211,23 @@ http {
     }
 
     # ===========================================
-    # [HARDENED] Default catch-all — drop unknown Host headers on port 80
+    # [HARDENED] Default catch-all — drop unknown Host headers
     # Scanners that hit the IP directly without a valid Host get 444
-    # Port 443 catch-all requires a self-signed cert; omitted since certbot manages certs here
     # ===========================================
     server {
         listen 80 default_server;
         listen [::]:80 default_server;
+        listen 443 ssl default_server;
+        listen [::]:443 ssl default_server;
+        http2 on;
         server_name _;
+
+        # Self-signed throwaway cert for the default block
+        # Generate once: openssl req -x509 -nodes -days 3650 \
+        #   -newkey rsa:2048 -keyout /etc/nginx/ssl/default.key \
+        #   -out /etc/nginx/ssl/default.crt -subj '/CN=localhost'
+        ssl_certificate /etc/nginx/ssl/default.crt;
+        ssl_certificate_key /etc/nginx/ssl/default.key;
 
         access_log /var/log/nginx/blocked.log blocked;
         return 444;
@@ -339,16 +317,13 @@ http {
         # -----------------------------------------------
         # Block empty User-Agent
         if ($empty_ua) {
+            access_log /var/log/nginx/blocked.log blocked;
             return 444;
         }
 
-        # Block known bad bots — internal Docker IPs are exempt via $block_bot
-        if ($block_bot) {
-            return 444;
-        }
-
-        # Block SSRF / DNS rebinding probes in query string
-        if ($block_ssrf) {
+        # Block known bad bots
+        if ($bad_bot) {
+            access_log /var/log/nginx/blocked.log blocked;
             return 444;
         }
 
@@ -543,16 +518,12 @@ http {
         # [HARDENED] Bot & scanner blocking (early exit)
         # -----------------------------------------------
         if ($empty_ua) {
+            access_log /var/log/nginx/blocked.log blocked;
             return 444;
         }
 
-        # Block known bad bots — internal Docker IPs are exempt via $block_bot
-        if ($block_bot) {
-            return 444;
-        }
-
-        # Block SSRF / DNS rebinding probes in query string
-        if ($block_ssrf) {
+        if ($bad_bot) {
+            access_log /var/log/nginx/blocked.log blocked;
             return 444;
         }
 
@@ -760,15 +731,12 @@ http {
         # [HARDENED] Bot & scanner blocking (early exit)
         # -----------------------------------------------
         if ($empty_ua) {
+            access_log /var/log/nginx/blocked.log blocked;
             return 444;
         }
 
         if ($bad_bot) {
-            return 444;
-        }
-
-        # Block SSRF / DNS rebinding probes in query string
-        if ($block_ssrf) {
+            access_log /var/log/nginx/blocked.log blocked;
             return 444;
         }
 

@@ -446,6 +446,8 @@ services:
       - ENVIRONMENT=production
       - LOG_LEVEL=info
       - IDENTIFIER_API_URL=http://identifier-api:8080
+      - TRACKER_API_URL=http://tracker-api:8088
+      - CLOUDAMQP_APIKEY=${CLOUDAMQP_APIKEY}
     labels:
       - logging=promtail
       - env=production

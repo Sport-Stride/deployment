@@ -7,11 +7,79 @@
 - **Nginx config reload vs restart** — Use `nginx -s reload` (graceful) not `systemctl restart nginx` (drops connections). The deploy script handles this correctly — don't change it.
 - **Docker image pull rate limits** — GHCR has rate limits for unauthenticated pulls. The VPS must be authenticated to GHCR via `docker login ghcr.io`.
 - **SSL certificate renewal** — Let's Encrypt certs auto-renew via certbot cron. If the cron job breaks silently, certs expire and all HTTPS traffic fails.
+- **`auth` zone rate too low** — The nginx `zone=auth` was originally `5r/s burst=20`. A client-side bug (AxiosProvider firing N simultaneous `update()` calls) caused 503 storms for mobile Safari users. Rate raised to `10r/s burst=30` as a safety net; the primary fix is in `coachify-client`. See the `/api/auth/session Rate Limit Storm` section below.
 
 ### How to think about changes here
 - The deploy workflow is triggered automatically by `repository_dispatch` events from service repos. Manual deploys use `workflow_dispatch`.
 - Each service is independently deployable — updating one service doesn't redeploy others.
 - The monitoring stack (Prometheus + Grafana + AlertManager) is deployed alongside services but updated separately.
+
+---
+
+## Issue: /api/auth/session Rate Limit Storm
+
+### What Happened
+
+On 2026-04-25, nginx started returning HTTP 503 for `GET /api/auth/session` from IP `197.28.28.199`. The nginx error log showed:
+```
+limiting requests, excess: ~20.x by zone 'auth'
+```
+All rejected requests arrived at the same millisecond, from `/dashboards/overview`, on an iPhone (iOS 18.7, Safari). `duration: 0.000` — nginx rejected them before the upstream (Next.js) was ever reached.
+
+### Root Cause
+
+The bug was in `coachify-client/src/components/axios/AxiosProvider.tsx`. When the Next.js app's access token was within 5 minutes of expiry, the Axios request interceptor called next-auth's `update()` function (which makes a GET + PATCH to `/api/auth/session`) **once per concurrent API request**, with no deduplication. The overview dashboard fires ~10–15 API calls in parallel on mount, so on iOS tab-restore (when all effects fire simultaneously) this produced ~15–25 concurrent requests to the rate-limited `/api/auth/session` endpoint.
+
+The nginx `auth` zone was `5r/s burst=20`. At ~25 requests/ms the excess (~20) filled the burst bucket and everything beyond was returned as 503.
+
+### Root Cause (nginx side)
+
+The rate of `5r/s` was appropriate for a true per-user polling scenario but too low for a legitimate burst caused by a multi-component page load. The safety net should absorb a reasonable page-load burst even if the client has a bug.
+
+### Affected Files
+
+| File | Change |
+|---|---|
+| `nginx/nginx.conf` | `zone=auth` rate `5r/s → 10r/s`, `burst=20 → 30` in `/api/auth/` location |
+
+### Fix Applied
+
+```nginx
+# BEFORE
+limit_req_zone $binary_remote_addr zone=auth:10m rate=5r/s;
+location /api/auth/ {
+    limit_req zone=auth burst=20 nodelay;
+    ...
+}
+
+# AFTER
+limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/s;
+location /api/auth/ {
+    # burst=30 nodelay: absorbs up to 30 extra requests before returning 503.
+    # Rate was raised from 5r/s → 10r/s. Client-side dedup (AxiosProvider
+    # pendingTokenRefresh guard) is the primary fix; this is the safety net.
+    limit_req zone=auth burst=30 nodelay;
+    ...
+}
+```
+
+### How to Reload Nginx After This Change
+
+```bash
+# On VPS — graceful reload, no connection drops
+docker exec nginx nginx -s reload
+
+# Verify no config errors first
+docker exec nginx nginx -t
+```
+
+### Prevention
+
+1. **Don't use `auth` rate limit as an abuse-detection signal.** It is a last-resort circuit breaker. Legitimate mobile clients burst when pages reload.
+2. **Monitor the auth zone in Grafana.** If the `nginx_http_requests_total{location="/api/auth/"}` counter shows 503s, the client-side dedup guard may have regressed.
+3. **The primary fix is in `coachify-client`** — see that repo's CLAUDE.md for the `pendingTokenRefresh` pattern. If you ever rewrite `AxiosProvider`, preserve that guard.
+
+
 
 ## 1. WHAT THIS REPOSITORY DOES
 

@@ -10,6 +10,11 @@ on:
         required: false
         default: 'all'
 
+# Ensure only one deploy runs at a time; queue instead of cancel
+concurrency:
+  group: deploy-to-vps
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

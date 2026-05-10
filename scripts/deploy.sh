@@ -94,7 +94,7 @@ start_services() {
     fi
   else
     log "🚀 START" "Starting/updating all services..."
-    if ! docker compose -f "$COMPOSE_FILE" up -d --remove-orphans; then
+    if ! docker compose -f "$COMPOSE_FILE" up -d; then
       log "❌ START" "Failed to start services"
       return 1
     fi

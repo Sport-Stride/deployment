@@ -118,26 +118,29 @@ wait_for_stability() {
   done
 }
 
-# Health checks
+# Health checks — rely on Docker's own health status since Go containers don't have curl
 run_health_checks() {
   log "🏥 HEALTH" "Running health checks..."
   
   local failed=0
+  local services="nginx-proxy frontend account-api identifier-api chat-api workout-api tracker-api payments-api notification-api invitation-api content-api statistics-api"
   
-  # Nginx health
-  if docker compose -f "$COMPOSE_FILE" exec -T nginx-proxy curl -f http://localhost/health > /dev/null 2>&1; then
-    log "✅ HEALTH" "Nginx is healthy"
-  else
-    log "❌ HEALTH" "Nginx health check failed"
-    failed=$((failed + 1))
-  fi
-  
-  # Core services health check (sample)
-  for service in account-api identifier-api chat-api; do
-    if docker compose -f "$COMPOSE_FILE" exec -T "$service" curl -f http://localhost:*/health > /dev/null 2>&1; then
-      log "✅ HEALTH" "$service is healthy"
+  for service in $services; do
+    local status
+    status=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.Health}}' "$service" 2>/dev/null || echo "unknown")
+    local state
+    state=$(docker compose -f "$COMPOSE_FILE" ps --format '{{.State}}' "$service" 2>/dev/null || echo "unknown")
+    
+    if [ "$state" != "running" ]; then
+      log "❌ HEALTH" "$service is not running (state: $state)"
+      failed=$((failed + 1))
+    elif [ "$status" = "healthy" ] || [ -z "$status" ]; then
+      log "✅ HEALTH" "$service is $state${status:+ ($status)}"
+    elif [ "$status" = "starting" ]; then
+      log "⚠️  HEALTH" "$service is starting up"
     else
-      log "⚠️  HEALTH" "$service health check timeout (may be starting)"
+      log "❌ HEALTH" "$service is $status"
+      failed=$((failed + 1))
     fi
   done
   
@@ -145,6 +148,8 @@ run_health_checks() {
     log "❌ HEALTH" "$failed health checks failed"
     return 1
   fi
+  
+  log "✅ HEALTH" "All services healthy"
 }
 
 # Cleanup old images

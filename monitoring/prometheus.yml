@@ -174,7 +174,6 @@ scrape_configs:
     static_configs:
       - targets: ['frontend:3000']
         labels:
-          service: 'frontend'
           tier: 'client'
     scrape_interval: 15s
     scrape_timeout: 10s

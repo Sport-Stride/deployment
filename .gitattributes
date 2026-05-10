@@ -1,0 +1,7 @@
+# Force LF line endings for all files deployed to Linux servers
+*.sh text eol=lf
+*.env text eol=lf
+versions.env text eol=lf
+.env.production text eol=lf
+nginx/*.conf text eol=lf
+docker-compose*.yml text eol=lf

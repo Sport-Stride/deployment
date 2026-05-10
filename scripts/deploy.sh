@@ -150,9 +150,9 @@ main() {
   # Change to deployment directory
   cd "$DEPLOYMENT_DIR" || { log "❌ ERROR" "Could not cd to $DEPLOYMENT_DIR"; exit 1; }
   
-  # Load environment variables
+  # Load environment variables (strip any Windows CR characters)
   set -a
-  [ -f versions.env ] && source versions.env
+  [ -f versions.env ] && source <(sed 's/\r$//' versions.env)
   set +a
   
   # Execute deployment steps

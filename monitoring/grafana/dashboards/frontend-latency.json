@@ -252,13 +252,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "sum(rate(frontend_http_request_duration_ms_count{status_code=~"4.."}[5m]))",
+          "expr": "sum(rate(frontend_http_request_duration_ms_count{status_code=~\"4..\"}[5m]))",
           "legendFormat": "4xx",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "expr": "sum(rate(frontend_http_request_duration_ms_count{status_code=~"5.."}[5m]))",
+          "expr": "sum(rate(frontend_http_request_duration_ms_count{status_code=~\"5..\"}[5m]))",
           "legendFormat": "5xx",
           "refId": "B"
         }

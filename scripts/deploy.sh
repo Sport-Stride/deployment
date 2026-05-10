@@ -101,6 +101,10 @@ start_services() {
   fi
   
   log "✅ START" "Services started successfully"
+  
+  # Restart nginx to re-resolve upstream DNS (containers may have new IPs)
+  log "🔄 NGINX" "Restarting nginx to refresh upstream DNS..."
+  docker compose -f "$COMPOSE_FILE" restart nginx-proxy 2>/dev/null || true
 }
 
 # Wait for services to stabilize

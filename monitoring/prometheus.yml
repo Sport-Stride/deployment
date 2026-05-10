@@ -137,6 +137,48 @@ scrape_configs:
   #   static_configs:
   #     - targets: ['nginx-proxy:8888']  # Requires stub_status module
 
+  # ===========================================
+  # MongoDB Exporter — per-operation latency, collection stats, connection pool
+  # Source: percona/mongodb_exporter running in coachify-mongodb-exporter container
+  # Key metrics:
+  #   mongodb_mongod_op_latencies_latency_total  → cumulative latency by op type
+  #   mongodb_mongod_op_latencies_ops_total      → op count by type (reads/writes/commands)
+  #   mongodb_mongod_connections                 → connection pool (current/available)
+  #   mongodb_mongod_wiredtiger_cache_bytes      → cache hit/miss ratio
+  #   mongodb_mongod_metrics_document_total      → docs inserted/returned/updated/deleted
+  #   mongodb_mongod_top_*                       → per-collection time/count (requires topmetrics)
+  #   mongodb_collstats_*                        → per-collection latency histograms
+  # ===========================================
+  - job_name: 'mongodb'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['mongodb-exporter:9216']
+        labels:
+          service: 'mongodb'
+          tier: 'database'
+    scrape_interval: 10s
+    scrape_timeout: 8s
+
+  # ===========================================
+  # Frontend (Next.js) — browser HTTP request latency
+  # Histograms emitted by axiosSingletons.ts via sendBeacon → /api/metrics/frontend
+  # Scraped from the frontend container running on port 3000.
+  # Key metrics:
+  #   frontend_http_request_duration_ms_bucket  → per-service latency histogram (ms)
+  #   frontend_http_request_duration_ms_sum     → total time per service/method/status
+  #   frontend_http_request_duration_ms_count   → request count
+  # Labels: service, method, status_code
+  # ===========================================
+  - job_name: 'frontend'
+    metrics_path: '/api/metrics/frontend'
+    static_configs:
+      - targets: ['frontend:3000']
+        labels:
+          service: 'frontend'
+          tier: 'client'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
 remote_write: []
 # Optional: Send metrics to external storage (InfluxDB, VictoriaMetrics, etc.)
 # - url: "http://remote-storage:9009/api/v1/push"

@@ -152,6 +152,7 @@ main() {
   
   # Load environment variables (strip any Windows CR characters)
   set -a
+  [ -f .env.production ] && source <(sed 's/\r$//' .env.production)
   [ -f versions.env ] && source <(sed 's/\r$//' versions.env)
   set +a
   

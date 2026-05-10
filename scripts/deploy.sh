@@ -45,14 +45,29 @@ backup_current_state() {
 
 # Pull latest images
 pull_images() {
-  log "📥 PULL" "Pulling latest images from registry..."
+  local service="$1"
   
-  if ! docker compose -f "$COMPOSE_FILE" pull --quiet; then
-    log "❌ PULL" "Failed to pull images"
-    return 1
+  if [ -n "$service" ] && [ "$service" != "all" ]; then
+    log "📥 PULL" "Pulling image for service: $service"
+    if ! docker compose -f "$COMPOSE_FILE" pull --quiet "$service" 2>/dev/null; then
+      log "⚠️  PULL" "Failed to pull $service from registry, using local image if available"
+    fi
+  else
+    log "📥 PULL" "Pulling latest images from registry..."
+    # Pull each service individually so one failure doesn't block others
+    local failed=0
+    for svc in $(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null); do
+      if ! docker compose -f "$COMPOSE_FILE" pull --quiet "$svc" 2>/dev/null; then
+        log "⚠️  PULL" "Failed to pull $svc — will use local image if available"
+        failed=$((failed + 1))
+      fi
+    done
+    if [ $failed -gt 0 ]; then
+      log "⚠️  PULL" "$failed service(s) could not be pulled — continuing with local images"
+    fi
   fi
   
-  log "✅ PULL" "All images pulled successfully"
+  log "✅ PULL" "Image pull phase completed"
 }
 
 # Validate compose file
@@ -69,11 +84,20 @@ validate_compose() {
 
 # Start/update services
 start_services() {
-  log "🚀 START" "Starting/updating services..."
+  local service="$1"
   
-  if ! docker compose -f "$COMPOSE_FILE" up -d --remove-orphans; then
-    log "❌ START" "Failed to start services"
-    return 1
+  if [ -n "$service" ] && [ "$service" != "all" ]; then
+    log "🚀 START" "Restarting service: $service"
+    if ! docker compose -f "$COMPOSE_FILE" up -d --no-deps "$service"; then
+      log "❌ START" "Failed to start $service"
+      return 1
+    fi
+  else
+    log "🚀 START" "Starting/updating all services..."
+    if ! docker compose -f "$COMPOSE_FILE" up -d --remove-orphans; then
+      log "❌ START" "Failed to start services"
+      return 1
+    fi
   fi
   
   log "✅ START" "Services started successfully"
@@ -156,11 +180,14 @@ main() {
   [ -f versions.env ] && source <(sed 's/\r$//' versions.env)
   set +a
   
+  local SERVICE_NAME="${1:-all}"
+  log "ℹ️  INFO" "Deploying: $SERVICE_NAME"
+  
   # Execute deployment steps
   backup_current_state
-  pull_images
+  pull_images "$SERVICE_NAME"
   validate_compose
-  start_services
+  start_services "$SERVICE_NAME"
   wait_for_stability
   run_health_checks
   cleanup_images

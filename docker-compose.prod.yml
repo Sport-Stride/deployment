@@ -92,9 +92,9 @@ services:
       - .env.production
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_USE_PROXY=true
+      - NEXT_PUBLIC_USE_PROXY=false
       
-      # Internal backend service URLs (for server-side proxy)
+      # Internal backend service URLs (for server-side proxy fallback only)
       - ACCOUNT_API_URL=http://account-api:8082
       - CHAT_API_BASE_URL=http://chat-api:8083
       - WORKOUT_API_URL=http://workout-api:8087

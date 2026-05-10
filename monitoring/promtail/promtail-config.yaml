@@ -120,6 +120,68 @@ scrape_configs:
           expression: '^/_next/static|^/favicon\.ico$|^/health$|^/metrics$'
           source: path
 
+  # =====================================================
+  # MongoDB Slow Query Log
+  # Reads /var/log/mongodb/mongod.log (host-mounted into Promtail).
+  # MongoDB 6.0 emits structured JSON diagnostic logs.
+  # Slow ops (>50ms) appear as msg:"Slow query" with full planSummary,
+  # keysExamined, docsExamined, durationMillis, and namespace.
+  # =====================================================
+  - job_name: mongodb-slow-queries
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          service: mongodb
+          env: production
+          platform: coachify
+          __path__: /var/log/mongodb/mongod.log
+
+    pipeline_stages:
+      # MongoDB 6.0 logs are structured JSON — parse the top-level fields
+      - json:
+          expressions:
+            severity:     s
+            component:    c
+            msg:          msg
+            ctx:          ctx
+
+      # Parse the nested 'attr' object for slow query details
+      - json:
+          source: attr
+          expressions:
+            ns:               ns
+            durationMillis:   durationMillis
+            planSummary:      planSummary
+            keysExamined:     keysExamined
+            docsExamined:     docsExamined
+            nreturned:        nreturned
+            queryHash:        queryHash
+            op_type:          type
+
+      # Only forward slow query entries — drop all other log lines
+      - drop:
+          expression: ''
+          source: msg
+          if: '{{ ne .msg "Slow query" }}'
+
+      # Map MongoDB severity (I/W/E/F) to Loki level labels
+      - template:
+          source: level
+          template: |
+            {{ if eq .severity "W" }}warn
+            {{ else if eq .severity "E" }}error
+            {{ else if eq .severity "F" }}critical
+            {{ else }}info{{ end }}
+
+      - labels:
+          level:      ""
+          component:  ""
+          op_type:    ""
+
+      - static_labels:
+          job: coachify-mongodb
+
   - job_name: coachify-nginx-errors
     static_configs:
       - targets:

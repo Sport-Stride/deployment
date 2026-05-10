@@ -6,13 +6,15 @@
 # Idempotent: each run creates a fresh timestamped dump directory.
 #
 # Required environment variables:
-#   SOURCE_MONGO_URI   — Atlas SRV connection string (source, read-only access ok)
-#   LOCAL_MONGO_URI    — Local MongoDB URI with admin credentials
+#   SOURCE_MONGO_URI    — Atlas SRV connection string (source, read-only access ok)
+#   MONGO_ADMIN_USER    — Local MongoDB admin username
+#   MONGO_ADMIN_PASSWORD — Local MongoDB admin password
 #
 # Usage:
 #   export SOURCE_MONGO_URI="mongodb+srv://user:pass@host/dbname?retryWrites=true&w=majority"
-#   export LOCAL_MONGO_URI="mongodb://adminUser:adminPass@localhost:27017/admin?authSource=admin"
-#   ./03_clone_from_cluster.sh
+#   export MONGO_ADMIN_USER=adminUser
+#   export MONGO_ADMIN_PASSWORD='yourAdminPassword'
+#   sudo ./03_clone_from_cluster.sh
 #
 # Best practices enforced:
 #   - mongodump/mongorestore (not mongoexport/import) — preserves BSON types
@@ -49,20 +51,22 @@ usage() {
   cat >&2 <<'EOF'
 Usage: set the following environment variables before running this script:
 
-  SOURCE_MONGO_URI   Atlas or cluster connection string (source database)
-  LOCAL_MONGO_URI    Local MongoDB connection string (destination, admin credentials)
+  SOURCE_MONGO_URI     Atlas or cluster connection string (source database)
+  MONGO_ADMIN_USER     Local MongoDB admin username
+  MONGO_ADMIN_PASSWORD Local MongoDB admin password
 
 Example:
   export SOURCE_MONGO_URI="mongodb+srv://user:pass@cluster.mongodb.net/coachify?retryWrites=true&w=majority"
-  export LOCAL_MONGO_URI="mongodb://adminUser:adminPass@localhost:27017/admin?authSource=admin"
-  ./03_clone_from_cluster.sh
+  export MONGO_ADMIN_USER=adminUser
+  export MONGO_ADMIN_PASSWORD='yourStrongAdminPassword'
+  sudo ./03_clone_from_cluster.sh
 EOF
   exit 1
 }
 
 validate_env() {
   local missing=0
-  for var in SOURCE_MONGO_URI LOCAL_MONGO_URI; do
+  for var in SOURCE_MONGO_URI MONGO_ADMIN_USER MONGO_ADMIN_PASSWORD; do
     if [[ -z "${!var:-}" ]]; then
       echo "ERROR: Required env var '${var}' is not set." >&2
       missing=1
@@ -72,15 +76,46 @@ validate_env() {
 }
 
 # ---------------------------------------------------------------------------
+# JS string escaping — escape \ and " for embedding in JS double-quoted strings
+# ---------------------------------------------------------------------------
+# Build URL-encoded local admin URI.
+# URL-encoding the password avoids any issues with special chars in URIs.
+# All local MongoDB connections (mongosh, mongodump, mongorestore) use this URI.
+# ---------------------------------------------------------------------------
+url_encode_pass() {
+  python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+}
+
+local_admin_uri() {
+  # Separate 'local' from assignment so python3 exit code is NOT masked
+  # (bash bug: 'local var=$(cmd)' always returns 0 for the local builtin)
+  local enc_pass
+  enc_pass="$(url_encode_pass "${MONGO_ADMIN_PASSWORD}")" \
+    || die "url_encode_pass failed — is python3 in PATH for sudo?"
+  printf 'mongodb://%s:%s@127.0.0.1:27017/admin?authSource=admin' \
+    "${MONGO_ADMIN_USER}" "${enc_pass}"
+}
+
+# URI without database path — required when using --db flag in mongorestore
+# (mongorestore rejects mismatched database in URI vs --db option)
+local_admin_uri_no_db() {
+  local enc_pass
+  enc_pass="$(url_encode_pass "${MONGO_ADMIN_PASSWORD}")" \
+    || die "url_encode_pass failed — is python3 in PATH for sudo?"
+  printf 'mongodb://%s:%s@127.0.0.1:27017/?authSource=admin' \
+    "${MONGO_ADMIN_USER}" "${enc_pass}"
+}
+
+# ---------------------------------------------------------------------------
 # Verify required tools are installed
 # ---------------------------------------------------------------------------
 check_tools() {
-  for tool in mongodump mongorestore mongosh; do
+  for tool in mongodump mongorestore mongosh python3; do
     if ! command -v "$tool" &>/dev/null; then
-      die "'${tool}' not found in PATH. Install mongodb-database-tools package."
+      die "'${tool}' not found in PATH. Install the required package."
     fi
   done
-  info "Required tools present: mongodump, mongorestore, mongosh."
+  info "Required tools present: mongodump, mongorestore, mongosh, python3."
 }
 
 # ---------------------------------------------------------------------------
@@ -96,13 +131,24 @@ test_connection() {
   success "Connected to ${label}."
 }
 
+test_local_connection() {
+  local local_uri; local_uri="$(local_admin_uri)"
+  info "Testing connectivity to local MongoDB..."
+  local err_out
+  err_out="$(mongosh --quiet "${local_uri}" --eval "db.adminCommand('ping')" 2>&1)" && {
+    success "Connected to local MongoDB."
+    return 0
+  }
+  warn "mongosh output: ${err_out}"
+  die "Cannot connect to local MongoDB. Check MONGO_ADMIN_USER / MONGO_ADMIN_PASSWORD and that mongod is running with auth enabled."
+}
+
 # ---------------------------------------------------------------------------
-# Print collection counts per database from a given URI (human summary)
+# Print collection counts per database (human summary)
 # ---------------------------------------------------------------------------
-print_collection_counts() {
-  local label="$1"
-  local uri="$2"
-  info "Collection document counts on ${label}:"
+print_source_collection_counts() {
+  local uri="$1"
+  info "Collection document counts on source:"
   mongosh --quiet "$uri" --eval '
     const adminDb = db.getSiblingDB("admin");
     const dbs = adminDb.adminCommand({ listDatabases: 1 }).databases
@@ -115,7 +161,25 @@ print_collection_counts() {
         print("  " + dbInfo.name + "." + col + " => " + count + " documents");
       });
     });
-  ' 2>/dev/null || warn "Could not print collection counts for ${label}."
+  ' 2>/dev/null || warn "Could not print collection counts for source."
+}
+
+print_local_collection_counts() {
+  local local_uri; local_uri="$(local_admin_uri)"
+  info "Collection document counts on local:"
+  mongosh --quiet "${local_uri}" --eval '
+    const adminDb = db.getSiblingDB("admin");
+    const dbs = adminDb.adminCommand({ listDatabases: 1 }).databases
+      .filter(d => !["admin","local","config"].includes(d.name));
+    dbs.forEach(function(dbInfo) {
+      const targetDb = adminDb.getSiblingDB(dbInfo.name);
+      const collections = targetDb.getCollectionNames();
+      collections.forEach(function(col) {
+        const count = targetDb.getCollection(col).countDocuments();
+        print("  " + dbInfo.name + "." + col + " => " + count + " documents");
+      });
+    });
+  ' 2>/dev/null || warn "Could not print local collection counts."
 }
 
 # ---------------------------------------------------------------------------
@@ -127,15 +191,52 @@ run_dump() {
   info "Dump directory: ${dump_dir}"
   info "This may take several minutes for large databases."
 
-  # --readPreference=secondary: read from secondary replica on Atlas, not primary
-  # --gzip: compress output, reduces size and transfer time significantly
-  # --forceTableScan: avoid stale oplog cursor issues on Atlas shared clusters
-  mongodump \
-    --uri="${SOURCE_MONGO_URI}" \
-    --readPreference=secondary \
-    --gzip \
-    --out="${dump_dir}" \
-    --excludeCollection=system.profile
+  # Strip the database name from the URI path so we can list and dump each
+  # database individually. Using --db per database avoids creating prelude.json.gz
+  # (the new mongodump full-cluster format), which mongorestore 100.x mishandles
+  # when combined with --nsInclude/--nsExclude flags.
+  local dump_uri
+  dump_uri="$(python3 -c "
+import sys
+from urllib.parse import urlparse, urlunparse
+u = urlparse(sys.argv[1])
+print(urlunparse(u._replace(path='/')))
+" "${SOURCE_MONGO_URI}")"
+  info "Base URI (database stripped): ${dump_uri//:*@/:/***@}"
+
+  # Get database list from source (exclude system databases)
+  info "Fetching database list from source Atlas cluster..."
+  local db_list
+  db_list="$(mongosh --quiet "${dump_uri}" --eval '
+    const dbs = db.getSiblingDB("admin").adminCommand({ listDatabases: 1 }).databases
+      .filter(function(d) { return !["admin","local","config"].includes(d.name); })
+      .map(function(d) { return d.name; });
+    print(dbs.join("\n"));
+  ' 2>/dev/null)"
+
+  if [[ -z "$db_list" ]]; then
+    die "Could not retrieve database list from source. Check SOURCE_MONGO_URI permissions."
+  fi
+
+  info "Databases to dump:"
+  while IFS= read -r db_name; do
+    [[ -z "$db_name" ]] && continue
+    info "  - ${db_name}"
+  done <<< "$db_list"
+
+  # Dump each database individually.
+  # --db ensures no prelude.json.gz is created (old-format dump structure).
+  # Old format: dump_dir/{dbName}/{collection}.bson.gz + .metadata.json.gz
+  while IFS= read -r db_name; do
+    [[ -z "$db_name" ]] && continue
+    info "  Dumping database '${db_name}'..."
+    mongodump \
+      --uri="${dump_uri}" \
+      --db="${db_name}" \
+      --readPreference=secondary \
+      --gzip \
+      --out="${dump_dir}"
+  done <<< "$db_list"
 
   success "mongodump completed. Dump saved to: ${dump_dir}"
 }
@@ -145,21 +246,45 @@ run_dump() {
 # ---------------------------------------------------------------------------
 run_restore() {
   local dump_dir="$1"
+  # Use URI without /admin path — required by mongorestore when --db is specified
+  # (mongorestore rejects mismatched database in URI path vs --db flag)
+  local local_uri; local_uri="$(local_admin_uri_no_db)"
   info "Starting mongorestore to local instance..."
   info "Source dump: ${dump_dir}"
-  info "--drop will replace any existing collections — this is expected for a clean clone."
 
-  # --drop: drop each collection before restoring (ensures clean state)
-  # --preserveUUID: keep original collection UUIDs (consistency across environments)
-  # --gzip: matches the dump format
-  # --stopOnError: fail immediately if any collection restore fails
-  mongorestore \
-    --uri="${LOCAL_MONGO_URI}" \
-    --gzip \
-    --drop \
-    --preserveUUID \
-    --stopOnError \
-    "${dump_dir}"
+  # Count BSON files to ensure the dump is not empty
+  local bson_count; bson_count="$(find "${dump_dir}" -name '*.bson.gz' -o -name '*.bson' | wc -l)"
+  if [[ "${bson_count}" -eq 0 ]]; then
+    die "Dump directory contains no BSON files. Aborting restore to avoid data loss."
+  fi
+  info "Found ${bson_count} BSON file(s) in dump — proceeding with restore."
+
+  # mongodump 100.17.0 writes metadata.json.gz with 'admin.*' as the namespace
+  # (the prelude.json.gz inside each DB directory remaps everything to admin).
+  # --nsInclude cannot filter by source namespace in this case.
+  #
+  # Fix: use --db=DBNAME on each per-DB directory to force the correct target
+  # database, ignoring whatever the metadata says.  --preserveUUID is omitted
+  # because it conflicts with the --db namespace override.
+  # --drop is kept for idempotency; it only drops collections within DBNAME.
+  while IFS= read -r db_dir; do
+    local db_name; db_name="$(basename "${db_dir}")"
+
+    # Guard: never restore system databases even if they slipped into the dump
+    if [[ "${db_name}" == "admin" || "${db_name}" == "local" || "${db_name}" == "config" ]]; then
+      warn "Skipping system database directory: ${db_name}"
+      continue
+    fi
+
+    info "  Restoring database '${db_name}'..."
+    mongorestore \
+      --uri="${local_uri}" \
+      --db="${db_name}" \
+      --gzip \
+      --drop \
+      --stopOnError \
+      "${db_dir}"
+  done < <(find "${dump_dir}" -mindepth 1 -maxdepth 1 -type d | sort)
 
   success "mongorestore completed."
 }
@@ -173,6 +298,8 @@ compare_counts() {
 
   local report_file="${dump_dir}/restore-verification.txt"
   local all_pass=true
+
+  local local_uri; local_uri="$(local_admin_uri)"
 
   mongosh --quiet "$SOURCE_MONGO_URI" --eval '
     const adminDb = db.getSiblingDB("admin");
@@ -190,7 +317,7 @@ compare_counts() {
     print(JSON.stringify(result));
   ' 2>/dev/null > /tmp/mongo_source_counts.json || die "Failed to read source counts."
 
-  mongosh --quiet "$LOCAL_MONGO_URI" --eval '
+  mongosh --quiet "${local_uri}" --eval '
     const adminDb = db.getSiblingDB("admin");
     const dbs = adminDb.adminCommand({ listDatabases: 1 }).databases
       .filter(d => !["admin","local","config"].includes(d.name));
@@ -266,7 +393,7 @@ main() {
   validate_env
   check_tools
   test_connection "source (Atlas/cluster)" "$SOURCE_MONGO_URI"
-  test_connection "local MongoDB" "$LOCAL_MONGO_URI"
+  test_local_connection
 
   # Create timestamped dump directory
   local timestamp; timestamp="$(date '+%Y-%m-%d_%H%M%S')"
@@ -275,7 +402,7 @@ main() {
   info "Dump directory: ${dump_dir}"
 
   # Print pre-dump source collection counts for operator verification
-  print_collection_counts "source (pre-dump)" "$SOURCE_MONGO_URI"
+  print_source_collection_counts "$SOURCE_MONGO_URI"
 
   # Dump
   run_dump "$dump_dir"

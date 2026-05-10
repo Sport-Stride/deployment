@@ -57,6 +57,26 @@ warn()    { log "WARN " "$@"; }
 die()     { log "ERROR" "$@"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# URL-encode a string for safe embedding in MongoDB URIs.
+# Encodes everything except unreserved URI characters (RFC 3986).
+# Pure bash — no Python or external tools required.
+# ---------------------------------------------------------------------------
+url_encode() {
+  local LC_ALL=C
+  local str="$1"
+  local encoded=""
+  local i c
+  for (( i=0; i<${#str}; i++ )); do
+    c="${str:i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) encoded+="$c" ;;
+      *) printf -v c '%%%02X' "'$c"; encoded+="$c" ;;
+    esac
+  done
+  printf '%s' "$encoded"
+}
+
+# ---------------------------------------------------------------------------
 # SSH / SCP helpers — always use the key, never fallback to other identities
 # ---------------------------------------------------------------------------
 
@@ -146,8 +166,11 @@ validate_env() {
     die "SSH key not found: ${SSH_KEY}. Set SSH_KEY env var or place the key at the default path."
   fi
 
-  # Build LOCAL_MONGO_URI from the individual vars for steps 02/03/04
-  LOCAL_MONGO_URI="mongodb://${MONGO_ADMIN_USER}:${MONGO_ADMIN_PASSWORD}@localhost:27017/admin?authSource=admin"
+  # Build LOCAL_MONGO_URI with URL-encoded credentials so passwords containing
+  # special characters (@ # : / ? ! +) don't break the MongoDB URI parser.
+  local encoded_admin_user; encoded_admin_user=$(url_encode "${MONGO_ADMIN_USER}")
+  local encoded_admin_pass; encoded_admin_pass=$(url_encode "${MONGO_ADMIN_PASSWORD}")
+  LOCAL_MONGO_URI="mongodb://${encoded_admin_user}:${encoded_admin_pass}@localhost:27017/admin?authSource=admin"
   export LOCAL_MONGO_URI
 }
 
@@ -155,35 +178,6 @@ check_tools() {
   for tool in ssh scp; do
     command -v "$tool" &>/dev/null || die "'${tool}' not found in PATH."
   done
-}
-
-# ---------------------------------------------------------------------------
-# Step 0: grant deploy passwordless sudo via ubuntu/deploy user with sudo
-# ---------------------------------------------------------------------------
-step_00_grant_sudo() {
-  info "━━━ STEP 0 ─ Grant '${VPS_USER}' passwordless sudo ━━━"
-
-  local sudoers_file="/etc/sudoers.d/99-deploy-nopasswd"
-  local user_opts=(-tt -i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
-
-  # Check if passwordless sudo is already in place
-  if ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" \
-    "test -f ${sudoers_file} && grep -qF 'NOPASSWD' ${sudoers_file}" 2>/dev/null; then
-    info "Passwordless sudo for '${VPS_USER}' already configured — skipping."
-    return 0
-  fi
-
-  info "Writing sudoers drop-in for '${VPS_USER}' via sudo (you may be prompted for the user's password once)..."
-  ssh "${user_opts[@]}" "${VPS_USER}@${VPS_HOST}" \
-    "sudo bash -c \"echo '${VPS_USER} ALL=(ALL) NOPASSWD: ALL' > ${sudoers_file} && chmod 440 ${sudoers_file} && visudo -cf ${sudoers_file}\""
-
-  if [[ $? -eq 0 ]]; then
-    success "Passwordless sudo granted to '${VPS_USER}'. Drop-in: ${sudoers_file}"
-    info "  Note: this applies to this migration only. Remove after cutover:"
-    info "    ssh ${VPS_USER}@${VPS_HOST} 'sudo rm ${sudoers_file}'"
-  else
-    warn "Failed to write sudoers drop-in. Subsequent steps will prompt for '${VPS_USER}' password."
-  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -241,7 +235,6 @@ main() {
   ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "echo 'SSH OK'" || die "Cannot connect to ${VPS_USER}@${VPS_HOST} with key ${SSH_KEY}."
   success "SSH connection established."
 
-  step_00_grant_sudo
   copy_scripts
   step_01_install
   step_02_create_users

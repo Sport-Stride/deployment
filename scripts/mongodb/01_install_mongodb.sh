@@ -77,7 +77,8 @@ EOF
 # ---------------------------------------------------------------------------
 install_debian() {
   info "Installing prerequisites..."
-  apt-get update -qq
+  # Attempt apt-get update, but ignore errors from pre-existing system repos (e.g., crowdsec)
+  apt-get update -qq || true
   apt-get install -y --no-install-recommends \
     gnupg curl ca-certificates lsb-release
 
@@ -86,10 +87,11 @@ install_debian() {
   case "${OS_ID}" in
     ubuntu)
       case "${OS_VERSION_ID}" in
-        20.04) distro_codename="focal"   ;;
-        22.04) distro_codename="jammy"   ;;
-        24.04) distro_codename="noble"   ;;
-        *) die "Unsupported Ubuntu version: ${OS_VERSION_ID}. Supported: 20.04, 22.04, 24.04." ;;
+        20.04) distro_codename="focal"  ;;
+        22.04) distro_codename="jammy"  ;;
+        # MongoDB 6.0 was EOL'd before Ubuntu 24.04/25.04 repos were published.
+        # Use jammy (22.04) packages — they are ABI-compatible with newer Ubuntu.
+        *)     distro_codename="jammy"; warn "Ubuntu ${OS_VERSION_ID} has no MongoDB 6.0 repo; using jammy (22.04) packages (ABI-compatible)." ;;
       esac
       ;;
     debian)
@@ -112,34 +114,37 @@ install_debian() {
   fi
 
   local list_file="/etc/apt/sources.list.d/mongodb-org-${MONGO_MAJOR}.list"
-  if [[ ! -f "$list_file" ]]; then
-    info "Adding MongoDB ${MONGO_MAJOR} apt repository for ${distro_codename}..."
-    echo "deb [ arch=amd64,arm64 signed-by=${keyring_path} ] https://repo.mongodb.org/apt/${OS_ID} ${distro_codename}/mongodb-org/${MONGO_MAJOR} multiverse" \
-      > "$list_file"
-    success "Repository added."
+  local expected_repo_line="deb [ arch=amd64,arm64 signed-by=${keyring_path} ] https://repo.mongodb.org/apt/${OS_ID} ${distro_codename}/mongodb-org/${MONGO_MAJOR} multiverse"
+
+  if [[ -f "$list_file" ]] && grep -qF "${distro_codename}" "$list_file"; then
+    info "MongoDB apt repository already configured for ${distro_codename} — skipping."
   else
-    info "MongoDB apt repository already configured — skipping."
+    info "Adding MongoDB ${MONGO_MAJOR} apt repository for ${distro_codename}..."
+    echo "$expected_repo_line" > "$list_file"
+    success "Repository added (codename: ${distro_codename})."
   fi
 
-  apt-get update -qq
+  # Update package lists with the MongoDB repo now available
+  # Ignore errors from pre-existing system repos; the MongoDB repo should be fine
+  apt-get update -qq || true
 
   if dpkg -l mongodb-org 2>/dev/null | grep -q "^ii.*${MONGO_VERSION}"; then
     info "mongodb-org ${MONGO_VERSION} already installed — skipping."
   else
     info "Installing mongodb-org=${MONGO_VERSION}..."
-    # Pin the version to prevent unintended upgrades
+    # Pin the version to prevent unintended upgrades.
+    # mongodb-mongosh has its own independent versioning (not tied to server version).
     apt-get install -y \
       "mongodb-org=${MONGO_VERSION}" \
       "mongodb-org-database=${MONGO_VERSION}" \
       "mongodb-org-server=${MONGO_VERSION}" \
-      "mongodb-mongosh=${MONGO_VERSION}" \
+      "mongodb-mongosh-shared-openssl3" \
       "mongodb-org-mongos=${MONGO_VERSION}" \
       "mongodb-org-tools=${MONGO_VERSION}"
-    # Hold versions
+    # Hold server-side packages at pinned version; mongosh floats with its own updates
     echo "mongodb-org hold"          | dpkg --set-selections
     echo "mongodb-org-database hold" | dpkg --set-selections
     echo "mongodb-org-server hold"   | dpkg --set-selections
-    echo "mongodb-mongosh hold"      | dpkg --set-selections
     echo "mongodb-org-mongos hold"   | dpkg --set-selections
     echo "mongodb-org-tools hold"    | dpkg --set-selections
     success "mongodb-org ${MONGO_VERSION} installed and pinned."

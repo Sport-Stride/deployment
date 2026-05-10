@@ -38,7 +38,7 @@ set -euo pipefail
 COMPOSE_FILE="${COMPOSE_FILE:-/home/deploy/production/coachify/docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-./.env.production}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
-LOGFILE="./mongodb-cutover.log"
+LOGFILE="${LOGFILE:-/home/deploy/mongodb-cutover.log}"
 
 # Microservice health endpoints (internal Docker network names → host ports exposed by nginx)
 # Checks are performed via nginx to confirm end-to-end availability.
@@ -152,6 +152,13 @@ update_env_file() {
       local old_uri
       old_uri="$(echo "$old_line" | cut -d= -f2-)"
 
+      # Idempotency: skip if already set to the target URI
+      if [[ "$old_uri" == "$NEW_MONGO_URI" ]]; then
+        info "  '${key}' already set to new local URI — skipping."
+        replaced=$(( replaced + 1 ))
+        continue
+      fi
+
       info "  Found '${key}' — current value: ${old_uri:0:60}..."
 
       # Comment out the old line and insert the new one after it
@@ -184,41 +191,56 @@ update_env_file() {
 
 # ---------------------------------------------------------------------------
 # Restart a single service and wait for healthy state
+# Uses Docker's own health status — avoids relying on nginx URL routing.
+# MONGODB_URI is exported so that compose variable substitution picks it up
+# (compose file has `environment: - MONGODB_URI=${MONGODB_URI}` which would
+# otherwise override the env_file value with an empty string).
 # ---------------------------------------------------------------------------
 restart_service() {
   local service="$1"
   local container="$2"
-  local health_url="$3"
+  local health_url="$3"   # kept for reference only
 
-  info "Restarting service: ${service}..."
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate "$service"
+  info "Restarting service: ${service} (container: ${container})..."
+  MONGODB_URI="${NEW_MONGO_URI}" docker compose --env-file "${ENV_FILE}" -f "$COMPOSE_FILE" up -d --no-deps --force-recreate "$service"
   success "  docker compose up issued for ${service}."
 
-  info "  Waiting up to ${HEALTH_TIMEOUT}s for ${service} to become healthy..."
+  info "  Waiting up to ${HEALTH_TIMEOUT}s for ${service} to report healthy..."
   local elapsed=0
   local healthy=false
 
   while (( elapsed < HEALTH_TIMEOUT )); do
-    local http_status
-    http_status="$(curl -s -o /dev/null -w "%{http_code}" \
-      --connect-timeout 3 --max-time 5 \
-      "${health_url}" 2>/dev/null || echo "000")"
+    local docker_status
+    docker_status="$(docker inspect --format='{{.State.Health.Status}}' "${container}" 2>/dev/null || echo 'unknown')"
 
-    if [[ "$http_status" == "200" ]]; then
+    if [[ "$docker_status" == "healthy" ]]; then
       healthy=true
       break
     fi
+    # Container may not have a health check — treat 'running' without a health
+    # check definition as healthy (some services omit it).
+    local running_status
+    running_status="$(docker inspect --format='{{.State.Status}}' "${container}" 2>/dev/null || echo 'unknown')"
+    local has_health
+    has_health="$(docker inspect --format='{{if .State.Health}}yes{{else}}no{{end}}' "${container}" 2>/dev/null || echo 'no')"
+    if [[ "$running_status" == "running" && "$has_health" == "no" ]]; then
+      healthy=true
+      break
+    fi
+
     sleep 2
     elapsed=$(( elapsed + 2 ))
-    info "    ${service}: HTTP ${http_status} (${elapsed}s elapsed)..."
+    info "    ${service}: docker_status=${docker_status} (${elapsed}s elapsed)..."
   done
 
   if [[ "$healthy" == "true" ]]; then
-    success "  ${service} is healthy (HTTP 200 from ${health_url})."
+    success "  ${service} is healthy."
     echo "PASS"
   else
-    warn "  ${service} did NOT return HTTP 200 within ${HEALTH_TIMEOUT}s."
-    warn "  Last response: HTTP ${http_status:-unknown} from ${health_url}"
+    local final_status
+    final_status="$(docker inspect --format='{{.State.Health.Status}}' "${container}" 2>/dev/null || echo 'unknown')"
+    warn "  ${service} did NOT reach healthy status within ${HEALTH_TIMEOUT}s."
+    warn "  Final docker health status: ${final_status}"
     warn "  Check logs: docker compose -f ${COMPOSE_FILE} logs ${service}"
     echo "FAIL"
   fi

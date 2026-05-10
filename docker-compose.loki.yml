@@ -68,6 +68,7 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - nginx_logs:/var/log/nginx:ro
+      - /var/log/mongodb:/var/log/mongodb:ro  # MongoDB slow query log
     command: -config.file=/etc/promtail/config.yaml
     networks:
       - coachify_net

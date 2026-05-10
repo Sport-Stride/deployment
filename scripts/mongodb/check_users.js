@@ -1,0 +1,1 @@
+db.getSiblingDB('admin').getUsers(); print('---'); db.getSiblingDB('admin').getUser('adminUser');

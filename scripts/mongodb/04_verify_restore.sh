@@ -10,13 +10,15 @@
 #   1 — at least one mismatch found (do NOT cut over until resolved)
 #
 # Required environment variables:
-#   SOURCE_MONGO_URI   — Atlas or cluster connection string (source)
-#   LOCAL_MONGO_URI    — Local MongoDB connection string (admin credentials)
+#   SOURCE_MONGO_URI     — Atlas or cluster connection string (source)
+#   MONGO_ADMIN_USER     — Local MongoDB admin username
+#   MONGO_ADMIN_PASSWORD — Local MongoDB admin password
 #
 # Usage:
 #   export SOURCE_MONGO_URI="mongodb+srv://user:pass@host/db?retryWrites=true&w=majority"
-#   export LOCAL_MONGO_URI="mongodb://adminUser:adminPass@localhost:27017/admin?authSource=admin"
-#   ./04_verify_restore.sh
+#   export MONGO_ADMIN_USER=adminUser
+#   export MONGO_ADMIN_PASSWORD='yourAdminPassword'
+#   sudo ./04_verify_restore.sh
 #   echo "Exit code: $?"
 # =============================================================================
 set -euo pipefail
@@ -46,26 +48,43 @@ usage() {
   cat >&2 <<'EOF'
 Usage: set the following environment variables before running this script:
 
-  SOURCE_MONGO_URI   Atlas or cluster connection string (source database)
-  LOCAL_MONGO_URI    Local MongoDB connection string (destination, admin credentials)
+  SOURCE_MONGO_URI     Atlas or cluster connection string (source database)
+  MONGO_ADMIN_USER     Local MongoDB admin username
+  MONGO_ADMIN_PASSWORD Local MongoDB admin password
 
 Example:
   export SOURCE_MONGO_URI="mongodb+srv://user:pass@cluster.mongodb.net/coachify?retryWrites=true&w=majority"
-  export LOCAL_MONGO_URI="mongodb://adminUser:adminPass@localhost:27017/admin?authSource=admin"
-  ./04_verify_restore.sh
+  export MONGO_ADMIN_USER=adminUser
+  export MONGO_ADMIN_PASSWORD='yourAdminPassword'
+  sudo ./04_verify_restore.sh
 EOF
   exit 1
 }
 
 validate_env() {
   local missing=0
-  for var in SOURCE_MONGO_URI LOCAL_MONGO_URI; do
+  for var in SOURCE_MONGO_URI MONGO_ADMIN_USER MONGO_ADMIN_PASSWORD; do
     if [[ -z "${!var:-}" ]]; then
       echo "ERROR: Required env var '${var}' is not set." >&2
       missing=1
     fi
   done
   [[ "$missing" -eq 0 ]] || usage
+}
+
+# ---------------------------------------------------------------------------
+# Build URL-encoded local admin URI (avoids URI parse errors with special chars)
+# ---------------------------------------------------------------------------
+url_encode_pass() {
+  python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+}
+
+local_admin_uri() {
+  local enc_pass
+  enc_pass="$(url_encode_pass "${MONGO_ADMIN_PASSWORD}")" \
+    || die "url_encode_pass failed — is python3 in PATH for sudo?"
+  printf 'mongodb://%s:%s@127.0.0.1:27017/admin?authSource=admin' \
+    "${MONGO_ADMIN_USER}" "${enc_pass}"
 }
 
 # ---------------------------------------------------------------------------
@@ -278,11 +297,14 @@ main() {
 
   validate_env
   check_tools
+
+  local local_uri; local_uri="$(local_admin_uri)"
+
   test_connection "source (Atlas/cluster)" "$SOURCE_MONGO_URI"
-  test_connection "local MongoDB" "$LOCAL_MONGO_URI"
+  test_connection "local MongoDB" "${local_uri}"
 
   collect_metadata "source" "$SOURCE_MONGO_URI" "$TMP_SOURCE"
-  collect_metadata "local"  "$LOCAL_MONGO_URI"  "$TMP_LOCAL"
+  collect_metadata "local"  "${local_uri}"       "$TMP_LOCAL"
 
   info "Running comparison..."
   run_comparison "$TMP_SOURCE" "$TMP_LOCAL"

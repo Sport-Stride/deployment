@@ -1,0 +1,399 @@
+{
+  "uid": "coachify-mongodb-perf",
+  "title": "MongoDB — Request Timing & Performance",
+  "description": "Per-collection latency, op rates, connection pool, slow queries from Promtail/Loki, and WiredTiger cache.",
+  "tags": ["mongodb", "database", "latency", "coachify"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 3,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "collection",
+        "label": "Collection",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "query": "label_values(mongodb_collstats_latencyStats_reads_latency, collection)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2
+      },
+      {
+        "name": "database",
+        "label": "Database",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "query": "label_values(mongodb_collstats_latencyStats_reads_latency, database)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "📊 Read Latency per Collection (µs/op avg)",
+      "description": "Average read latency in microseconds per operation. Formula: rate(latency) / rate(ops). 0 = no reads yet.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µs",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 20000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max", "mean"] } },
+      "targets": [
+        {
+          "expr": "rate(mongodb_collstats_latencyStats_reads_latency{collection=~\"$collection\",database=~\"$database\"}[2m]) / rate(mongodb_collstats_latencyStats_reads_ops{collection=~\"$collection\",database=~\"$database\"}[2m]) > 0",
+          "legendFormat": "{{database}}.{{collection}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "✏️ Write Latency per Collection (µs/op avg)",
+      "description": "Average write latency in microseconds per operation. Spikes indicate slow inserts/updates/deletes.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µs",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10000 },
+              { "color": "red", "value": 50000 }
+            ]
+          }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max", "mean"] } },
+      "targets": [
+        {
+          "expr": "rate(mongodb_collstats_latencyStats_writes_latency{collection=~\"$collection\",database=~\"$database\"}[2m]) / rate(mongodb_collstats_latencyStats_writes_ops{collection=~\"$collection\",database=~\"$database\"}[2m]) > 0",
+          "legendFormat": "{{database}}.{{collection}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "📈 Read Ops/sec per Collection",
+      "description": "Read operation throughput. Correlate with latency panels to detect load-induced slowdowns.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 5 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "rate(mongodb_collstats_latencyStats_reads_ops{collection=~\"$collection\",database=~\"$database\"}[2m])",
+          "legendFormat": "{{database}}.{{collection}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "✏️ Write Ops/sec per Collection",
+      "description": "Write operation throughput — inserts, updates, deletes combined.",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 5 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "rate(mongodb_collstats_latencyStats_writes_ops{collection=~\"$collection\",database=~\"$database\"}[2m])",
+          "legendFormat": "{{database}}.{{collection}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "🔌 Connection Pool",
+      "description": "Current vs available connections. current → active app connections. available → free slots. If available approaches 0, the pool is exhausted.",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "mongodb_ss_connections{conn_type=\"current\"}",
+          "legendFormat": "Current",
+          "refId": "A"
+        },
+        {
+          "expr": "mongodb_ss_connections{conn_type=\"available\"}",
+          "legendFormat": "Available",
+          "refId": "B"
+        },
+        {
+          "expr": "mongodb_ss_connections{conn_type=\"totalCreated\"}",
+          "legendFormat": "Total Created",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "🐢 Slow Queries (>50ms) from Loki",
+      "description": "Every MongoDB operation >50ms captured from mongod.log via Promtail. Shows namespace, duration, planSummary, keysExamined, docsExamined. A COLLSCAN with high docsExamined = missing index.",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "expr": "{service=\"mongodb\",job=\"coachify-mongodb\"} | json | line_format \"[{{.durationMillis}}ms] {{.ns}} | plan={{.planSummary}} | keys={{.keysExamined}} docs={{.docsExamined}} returned={{.nreturned}}\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "📦 Documents Scanned vs Returned (Efficiency Ratio)",
+      "description": "docsExamined / docsReturned. A ratio >>1 means MongoDB is scanning many docs to return few — indicates missing indexes. Ratio close to 1 is ideal.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "rate(mongodb_ss_metrics_document{doc_op_type=\"returned\"}[5m]) > 0",
+          "legendFormat": "Returned/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(mongodb_ss_metrics_queryExecutor_scanned[5m])",
+          "legendFormat": "Keys Scanned/sec",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(mongodb_ss_metrics_queryExecutor_scannedObjects[5m])",
+          "legendFormat": "Objects Scanned/sec",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "🧠 WiredTiger Cache Hit Rate",
+      "description": "Cache bytes in use vs dirty vs total. High dirty ratio means lots of unwritten data — potential write bottleneck.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 20 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "mongodb_ss_wt_cache_maximum_bytes_configured",
+          "legendFormat": "Cache Total",
+          "refId": "A"
+        },
+        {
+          "expr": "mongodb_ss_wt_cache_bytes_currently_in_the_cache",
+          "legendFormat": "Cache Used",
+          "refId": "B"
+        },
+        {
+          "expr": "mongodb_ss_wt_cache_tracked_dirty_bytes_in_the_cache",
+          "legendFormat": "Dirty (unwritten)",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "🔑 Index vs Collection Scan Rate",
+      "description": "Keys scanned per document returned. High ratio = COLLSCAN or inefficient indexes. This metric drives which queries need indexes.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 31, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "textMode": "auto", "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "rate(mongodb_ss_metrics_queryExecutor_scannedObjects[5m]) / rate(mongodb_ss_metrics_document{doc_op_type=\"returned\"}[5m]) > 0",
+          "legendFormat": "Docs Scanned / Returned",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "⚡ Global Op Latency — Reads (µs/op)",
+      "description": "Server-wide average read latency across all operations. From MongoDB diagnosticData — most accurate global view.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 31, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µs",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2000 },
+              { "color": "red", "value": 10000 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "rate(mongodb_ss_opLatencies_latency{op_type=\"reads\"}[5m]) / rate(mongodb_ss_opLatencies_ops{op_type=\"reads\"}[5m]) > 0",
+          "legendFormat": "Read µs/op",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "⚡ Global Op Latency — Writes (µs/op)",
+      "description": "Server-wide average write latency.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 31, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µs",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 25000 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "rate(mongodb_ss_opLatencies_latency{op_type=\"writes\"}[5m]) / rate(mongodb_ss_opLatencies_ops{op_type=\"writes\"}[5m]) > 0",
+          "legendFormat": "Write µs/op",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "⚡ Global Op Latency — Commands (µs/op)",
+      "description": "Server-wide average command latency (aggregations, distinct, count, etc.).",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 31, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µs",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 30000 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "rate(mongodb_ss_opLatencies_latency{op_type=\"commands\"}[5m]) / rate(mongodb_ss_opLatencies_ops{op_type=\"commands\"}[5m]) > 0",
+          "legendFormat": "Command µs/op",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

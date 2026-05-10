@@ -103,6 +103,55 @@ services:
           memory: 256M
 
   # ===========================================
+  # MongoDB Exporter - DB metrics → Prometheus
+  # Exposes per-operation latency histograms, connection pool,
+  # WiredTiger cache, replication lag, and collection stats.
+  # Uses adminUser (root) for full metric access.
+  # ===========================================
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.40.0
+    container_name: coachify-mongodb-exporter
+    restart: unless-stopped
+    command:
+      - '--mongodb.uri=mongodb://adminUser:SportStride2026!@172.18.0.1:27017/?authSource=admin'
+      - '--collector.diagnosticdata'
+      - '--collector.replicasetstatus'
+      - '--collector.dbstats'
+      - '--collector.dbstatsfreestorage'
+      - '--collector.topmetrics'
+      - '--collector.indexstats'
+      - '--collector.collstats'
+      - '--mongodb.collstats-colls=COACHIFY.invitations,COACHIFY.account,COACHIFY.conversation,COACHIFY.chat,users.users,users.coaches,users.coach_clients,workout-management.workouts,workout-management.exercises,workout-management.programs,workout-management.tasks,workout-management.metrics'
+      - '--web.listen-address=:9216'
+      - '--web.telemetry-path=/metrics'
+      - '--log.level=warn'
+    ports:
+      - "9216:9216"
+    networks:
+      - coachify_net
+    environment:
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9216/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  # ===========================================
   # AlertManager - Alert routing & management
   # ===========================================
   alertmanager:

@@ -111,6 +111,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: 22
           script: mkdir -p "${{ vars.VPS_DEPLOY_PATH || '/home/deploy/production/coachify' }}"/{scripts/mongodb,nginx/conf.d,backups}
 
@@ -120,6 +121,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: 22
           source: "docker-compose.prod.yml,versions.env,scripts/deploy.sh,scripts/rollback.sh,scripts/mongodb/local-init.sh,nginx/nginx.conf,nginx/conf.d/default.conf"
           target: ${{ vars.VPS_DEPLOY_PATH || '/home/deploy/production/coachify' }}
@@ -134,6 +136,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: 22
           envs: SERVICE_NAME,SERVICE_VERSION
           script: |
@@ -173,6 +176,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           port: 22
           script: |
             DEPLOYMENT_DIR="${{ vars.VPS_DEPLOY_PATH || '/home/deploy/production/coachify' }}"

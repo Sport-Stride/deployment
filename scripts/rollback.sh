@@ -4,7 +4,7 @@
 
 set -e
 
-DEPLOYMENT_DIR="/home/deploy/production/coachify"
+DEPLOYMENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_FILE="${DEPLOYMENT_DIR}/deploy.log"
 BACKUP_DIR="${DEPLOYMENT_DIR}/backups"
 COMPOSE_FILE="${DEPLOYMENT_DIR}/docker-compose.prod.yml"

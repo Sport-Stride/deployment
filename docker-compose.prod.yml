@@ -15,8 +15,94 @@ volumes:
     driver: local
   certbot_data:
     driver: local
+  mongo_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
 
 services:
+  # ===========================================
+  # Local MongoDB (optional)
+  # Only started when COMPOSE_PROFILES=local-db (put it in a `.env` file next to
+  # this compose file). Use it on hosts that have no MongoDB of their own; point
+  # MONGODB_URI/MONGO_URI/MONGO_URL at host `mongodb` in .env.production.
+  # Requires LOCAL_MONGO_ROOT_PASSWORD, MONGO_APP_USER, MONGO_APP_PASSWORD.
+  # ===========================================
+  mongodb:
+    image: mongo:6.0
+    profiles: ["local-db"]
+    container_name: coachify-mongodb
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=adminUser
+      - MONGO_INITDB_ROOT_PASSWORD=${LOCAL_MONGO_ROOT_PASSWORD}
+      - MONGO_APP_USER=${MONGO_APP_USER}
+      - MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD}
+    # Loopback only (not reachable from the LAN). Use an SSH tunnel to browse the data:
+    #   ssh -N -L 27018:127.0.0.1:27017 <user>@<vps>
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./scripts/mongodb/local-init.sh:/docker-entrypoint-initdb.d/10-app-user.sh:ro
+    networks:
+      - coachify_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # Local RabbitMQ (optional, same `local-db` profile). Use when no CloudAMQP
+  # instance is available: set CLOUDAMQP_URL=amqp://coachify:<LOCAL_RABBITMQ_PASSWORD>@rabbitmq:5672/
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    profiles: ["local-db"]
+    container_name: coachify-rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=coachify
+      - RABBITMQ_DEFAULT_PASS=${LOCAL_RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - coachify_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Web UI to browse MongoDB (optional, `local-db` profile). Bound to the VPS loopback
+  # only; reach it with an SSH tunnel:  ssh -N -L 8081:127.0.0.1:8081 <user>@<vps>
+  # then open http://localhost:8081 (basic auth: admin / LOCAL_MONGO_EXPRESS_PASSWORD).
+  mongo-express:
+    image: mongo-express:1.0.2-20
+    profiles: ["local-db"]
+    container_name: coachify-mongo-express
+    restart: unless-stopped
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://adminUser:${LOCAL_MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=${LOCAL_MONGO_EXPRESS_PASSWORD}
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - coachify_net
+    depends_on:
+      - mongodb
+
   # ===========================================
   # Reverse Proxy & Load Balancer
   # ===========================================
@@ -146,7 +232,7 @@ services:
 
   # Vitrine/Landing Page Frontend (coachify.training)
   landing:
-    image: ghcr.io/sport-stride/coachify-landing:${VITRINE_VERSION:-latest}
+    image: ghcr.io/sport-stride/coachify-landing:${LANDING_VERSION:-latest}
     container_name: coachify-landing
     restart: unless-stopped
     environment:
@@ -158,7 +244,7 @@ services:
       - coachify_net
     pull_policy: always
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3001/"]
       interval: 10s
       timeout: 5s
       retries: 3

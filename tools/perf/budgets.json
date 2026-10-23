@@ -1,0 +1,8 @@
+{
+  "default": { "p95Ms": 800, "p99Ms": 2000, "maxMs": 10000, "errorRate5xx": 0.01 },
+  "ignore": ["/health", "/metrics", "/api/metrics", "/status"],
+  "routes": {
+    "GET /analytics/export": { "p95Ms": 5000, "p99Ms": 10000, "maxMs": 30000 },
+    "GET /payments/analytics/export": { "p95Ms": 5000, "p99Ms": 10000, "maxMs": 30000 }
+  }
+}

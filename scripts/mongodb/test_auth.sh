@@ -6,7 +6,8 @@ js_escape() {
   printf '%s' "$s"
 }
 esc_user="$(js_escape "adminUser")"
-esc_pass="$(js_escape "SportStride2026!")"
+: "${MONGO_ADMIN_PASSWORD:?set MONGO_ADMIN_PASSWORD in the environment}"
+esc_pass="$(js_escape "$MONGO_ADMIN_PASSWORD")"
 tmp="$(mktemp /tmp/.mongo-XXXXXXXX.js)"
 chmod 600 "$tmp"
 printf '%s\n' "

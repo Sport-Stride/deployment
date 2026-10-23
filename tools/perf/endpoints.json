@@ -1,0 +1,58 @@
+[
+  { "name": "account: coach clients", "method": "GET", "service": "account", "path": "/coach/clients?size=50", "expectStatus": 200, "budgetP95Ms": 800 },
+  { "name": "account: coach team", "method": "GET", "service": "account", "path": "/coach/team", "expectStatus": [200, 404] },
+  { "name": "account: gym invitations", "method": "GET", "service": "account", "path": "/coach/gym-invitations", "expectStatus": 200 },
+  { "name": "account: head-coach me", "method": "GET", "service": "account", "path": "/head-coach/me", "expectStatus": [200, 403, 404] },
+  { "name": "account: analytics scope", "method": "GET", "service": "account", "path": "/analytics/scope", "expectStatus": 200 },
+  { "name": "account: coach-of-client", "method": "GET", "service": "account", "path": "/coach/client?client_id={clientId}", "expectStatus": [200, 404], "needs": ["clientId"] },
+
+  { "name": "payment: my subscriptions", "method": "GET", "service": "payment", "path": "/subscriptions", "expectStatus": 200 },
+  { "name": "payment: billing info", "method": "GET", "service": "payment", "path": "/subscriptions/billing/info", "expectStatus": [200, 404] },
+  { "name": "payment: billing clients info", "method": "GET", "service": "payment", "path": "/subscriptions/billing/clients/info", "expectStatus": 200, "budgetP95Ms": 1500 },
+  { "name": "payment: client features", "method": "GET", "service": "payment", "path": "/subscriptions/features/{clientId}", "expectStatus": [200, 404], "needs": ["clientId"] },
+  { "name": "payment: analytics summary", "method": "GET", "service": "payment", "path": "/analytics/summary", "expectStatus": 200 },
+  { "name": "payment: analytics revenue series", "method": "GET", "service": "payment", "path": "/analytics/revenue/series", "expectStatus": 200 },
+  { "name": "payment: analytics revenue breakdown", "method": "GET", "service": "payment", "path": "/analytics/revenue/breakdown", "expectStatus": 200 },
+  { "name": "payment: analytics clients series", "method": "GET", "service": "payment", "path": "/analytics/clients/series", "expectStatus": 200 },
+  { "name": "payment: analytics subscriptions mix", "method": "GET", "service": "payment", "path": "/analytics/subscriptions/mix", "expectStatus": 200 },
+  { "name": "payment: analytics subscriptions", "method": "GET", "service": "payment", "path": "/analytics/subscriptions", "expectStatus": 200 },
+  { "name": "payment: coach plans", "method": "GET", "service": "payment", "path": "/coach/plans", "expectStatus": 200 },
+  { "name": "payment: public coach plans", "method": "GET", "service": "payment", "path": "/public/plans/coach", "expectStatus": 200 },
+
+  { "name": "statistics: dashboard client", "method": "GET", "service": "statistics", "path": "/dashboard/client?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "statistics: dashboard coach", "method": "GET", "service": "statistics", "path": "/dashboard/coach?coach_id={coachId}", "expectStatus": 200, "needs": ["coachId"] },
+  { "name": "statistics: goal countdown", "method": "GET", "service": "statistics", "path": "/goal-countdown?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "statistics: notes", "method": "GET", "service": "statistics", "path": "/notes?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "statistics: progress photos", "method": "GET", "service": "statistics", "path": "/progress-photos?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "statistics: exercise history enriched", "method": "GET", "service": "statistics", "path": "/statistics/exercise-history-enriched?client_id={clientId}", "expectStatus": [200, 400], "needs": ["clientId"] },
+  { "name": "statistics: latest metric group", "method": "GET", "service": "statistics", "path": "/metric-groups/by-client/{clientId}/latest-with-data", "expectStatus": [200, 404], "needs": ["clientId"] },
+  { "name": "statistics: meal plans", "method": "GET", "service": "statistics", "path": "/meal-plans?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "statistics: food journals", "method": "GET", "service": "statistics", "path": "/food-journals?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "statistics: achievements", "method": "GET", "service": "statistics", "path": "/analytics/achievements?client_id={clientId}", "expectStatus": 200, "needs": ["clientId"] },
+
+  { "name": "tracker: events by client", "method": "GET", "service": "tracker", "path": "/events/by-client/{clientId}", "expectStatus": 200, "needs": ["clientId"] },
+  { "name": "tracker: assignments (coach)", "method": "GET", "service": "tracker", "path": "/assignments", "expectStatus": 200 },
+  { "name": "tracker: meetings (coach)", "method": "GET", "service": "tracker", "path": "/meetings", "expectStatus": 200 },
+  { "name": "tracker: notifications", "method": "GET", "service": "tracker", "path": "/notification", "expectStatus": 200 },
+  { "name": "tracker: unread count", "method": "GET", "service": "tracker", "path": "/notification/count", "expectStatus": 200 },
+  { "name": "tracker: scheduled assignments", "method": "GET", "service": "tracker", "path": "/scheduler/assignments", "expectStatus": [200, 400] },
+
+  { "name": "workout: workouts", "method": "GET", "service": "workout", "path": "/workouts", "expectStatus": 200 },
+  { "name": "workout: exercises", "method": "GET", "service": "workout", "path": "/exercises", "expectStatus": 200 },
+  { "name": "workout: programs", "method": "GET", "service": "workout", "path": "/programs", "expectStatus": 200 },
+  { "name": "workout: metrics", "method": "GET", "service": "workout", "path": "/metrics", "expectStatus": 200 },
+  { "name": "workout: metric groups", "method": "GET", "service": "workout", "path": "/metric-groups", "expectStatus": 200 },
+  { "name": "workout: recipes", "method": "GET", "service": "workout", "path": "/recipes", "expectStatus": 200 },
+  { "name": "workout: meal plans", "method": "GET", "service": "workout", "path": "/mealplans", "expectStatus": 200 },
+  { "name": "workout: active meal plan", "method": "GET", "service": "workout", "path": "/mealplans/active/{clientId}", "expectStatus": [200, 404], "needs": ["clientId"] },
+  { "name": "workout: ingredients", "method": "GET", "service": "workout", "path": "/ingredients", "expectStatus": 200 },
+  { "name": "workout: workout programs", "method": "GET", "service": "workout", "path": "/workout-programs", "expectStatus": 200 },
+
+  { "name": "content: blogs", "method": "GET", "service": "content", "path": "/blogs", "expectStatus": 200 },
+  { "name": "content: products", "method": "GET", "service": "content", "path": "/products/", "expectStatus": 200 },
+
+  { "name": "chat: conversations", "method": "GET", "service": "chat", "path": "/get-conversations", "expectStatus": 200 },
+  { "name": "chat: global unread count", "method": "GET", "service": "chat", "path": "/user/global-unread-count", "expectStatus": 200 },
+
+  { "name": "identifier: entities (internal only, not behind /api/proxy)", "method": "GET", "service": "identifier", "path": "/entity", "expectStatus": 200, "enabled": false }
+]

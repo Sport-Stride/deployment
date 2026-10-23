@@ -3,8 +3,8 @@
 set -e
 
 ADMIN_USER='adminUser'
-ADMIN_PASS='SportStride2026!'
-ENCODED_PASS=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${ADMIN_PASS}', safe=''))")
+ADMIN_PASS="${MONGO_ADMIN_PASSWORD:?set MONGO_ADMIN_PASSWORD in the environment}"
+ENCODED_PASS="$(python3 -c 'import sys,urllib.parse as u;print(u.quote(sys.argv[1],safe=""))' "$ADMIN_PASS")"
 ADMIN_URI="mongodb://${ADMIN_USER}:${ENCODED_PASS}@127.0.0.1:27017/admin?authSource=admin"
 
 echo "=== Current databases ==="

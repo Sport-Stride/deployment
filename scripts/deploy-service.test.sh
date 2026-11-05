@@ -90,7 +90,7 @@ new_proj() {
   : >"$P/docker-compose.prod.yml"
   : >"$P/.env.production"
   local v
-  for v in IDENTIFIER NOTIFICATION CONTENT WORKOUT TRACKER STATISTICS PAYMENTS ACCOUNT INVITATION CHAT; do
+  for v in IDENTIFIER NOTIFICATION CONTENT WORKOUT TRACKER STATISTICS PAYMENTS ACCOUNT INVITATION CHAT AI; do
     echo "${v}_API_VERSION=$OLD"
   done >"$P/versions.env"
   printf 'FRONTEND_VERSION=%s\nNGINX_VERSION=1.25\n' "$OLD" >>"$P/versions.env"
@@ -244,9 +244,9 @@ new_proj
 touch "$STUB/pull_ok"
 deploy all latest-from-versions --dry-run --local
 check "all dry-run rc 0" eq "$RC" 0
-check "all dry-run lists all 11" eq "$(grep -c 'would set' <<<"$OUT")" 11
+check "all dry-run lists all 12" eq "$(grep -c 'would set' <<<"$OUT")" 12
 ORDER=$(grep -- "=== " <<<"$OUT" | sed -E 's/.*=== ([a-z-]+):.*/\1/' | tr '\n' ' ')
-check "all dry-run order identifier first, frontend last" eq "$ORDER" "identifier-api notification-api content-api workout-api tracker-api statistics-api payments-api account-api invitation-api chat-api frontend "
+check "all dry-run order identifier first, frontend last" eq "$ORDER" "identifier-api notification-api content-api workout-api tracker-api statistics-api payments-api account-api invitation-api chat-api ai-api frontend "
 
 new_proj
 OUT=$(env PATH="$BIN:$PATH" STUB_DIR="$STUB" COACHIFY_DIR="$P" bash "$SCRIPT" identifier-api "$NEW" --dry-run --host me@example 2>&1)

@@ -20,6 +20,7 @@
 | workout-api | 8087 | Workout plans, exercises |
 | tracker-api | 8088 | Progress tracking, notification events |
 | statistics-api | 8089 | Analytics, aggregations |
+| ai-api | 8090 | Role-aware AI assistant (provider fallback chain; context from account/workout/tracker/statistics) |
 
 ### Chat API Unread Badge Endpoints
 - `GET /user/unread-count?roomId={id}&userId={id}` — Per-conversation unread count (MongoDB ReadeReceipt collection)

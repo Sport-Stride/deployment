@@ -68,6 +68,15 @@ scrape_configs:
           tier: 'messaging'
     scrape_interval: 10s
 
+  - job_name: 'ai-api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['ai-api:8090']
+        labels:
+          service: 'ai'
+          tier: 'ai'
+    scrape_interval: 10s
+
   - job_name: 'content-api'
     metrics_path: '/metrics'
     static_configs:

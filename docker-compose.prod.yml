@@ -19,6 +19,8 @@ volumes:
     driver: local
   rabbitmq_data:
     driver: local
+  ollama_data:
+    driver: local
 
 services:
   # ===========================================
@@ -142,6 +144,7 @@ services:
       - workout-api
       - tracker-api
       - statistics-api
+      - ai-api
     labels:
       - service=coachify-nginx-proxy
       - env=production
@@ -184,6 +187,7 @@ services:
       # Internal backend service URLs (for server-side proxy fallback only)
       - ACCOUNT_API_URL=http://account-api:8082
       - CHAT_API_BASE_URL=http://chat-api:8083
+      - AI_API_URL=http://ai-api:8090
       - WORKOUT_API_URL=http://workout-api:8087
       - INVITATION_API_URL=http://invitation-api:8085
       - STATISTICS_API_URL=http://statistics-api:8089
@@ -409,6 +413,67 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+
+  # AI assistant (Gemini/Groq/OpenRouter/Mistral fallback chain). Provider keys live in
+  # .env.ai (chmod 600), never in the shared .env.production.
+  ai-api:
+    image: ghcr.io/sport-stride/coachify-ai-api:${AI_API_VERSION:-latest}
+    container_name: coachify-ai-api
+    restart: unless-stopped
+    env_file:
+      - .env.production
+      - .env.ai
+    environment:
+      - PORT=8090
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - ACCOUNT_API_URL=http://account-api:8082
+      - WORKOUT_API_URL=http://workout-api:8087
+      - TRACKER_API_URL=http://tracker-api:8088
+      - STATISTICS_API_URL=http://statistics-api:8089
+      - AI_OLLAMA_BASE_URL=http://ollama:11434
+    labels:
+      - logging=promtail
+      - env=production
+      - platform=coachify
+    networks:
+      - coachify_net
+    pull_policy: always
+    depends_on:
+      - account-api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=ai-api,env=production"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Local LLM fallback. Not started by default: only with `--profile ai-local`.
+  # Not in the default AI_PROVIDERS; add `ollama` there only after deploying it.
+  ollama:
+    image: ollama/ollama:0.12.6
+    container_name: coachify-ollama
+    profiles: ["ai-local"]
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - coachify_net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # TODO: set a memory limit when Ollama is actually deployed (depends on model size).
 
   content-api:
     image: ghcr.io/sport-stride/coachify-content-api:${CONTENT_API_VERSION:-latest}

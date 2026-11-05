@@ -23,7 +23,7 @@ declare -A SVC_VAR=(
   [tracker-api]=TRACKER_API_VERSION [statistics-api]=STATISTICS_API_VERSION
   [payments-api]=PAYMENTS_API_VERSION [account-api]=ACCOUNT_API_VERSION
   [invitation-api]=INVITATION_API_VERSION [chat-api]=CHAT_API_VERSION
-  [frontend]=FRONTEND_VERSION
+  [ai-api]=AI_API_VERSION [frontend]=FRONTEND_VERSION
 )
 declare -A SVC_CTR=(
   [identifier-api]=coachify-identifier-api [notification-api]=coachify-notification-api
@@ -31,12 +31,12 @@ declare -A SVC_CTR=(
   [tracker-api]=coachify-tracker-api [statistics-api]=coachify-statistics-api
   [payments-api]=coachify-payments-api [account-api]=coachify-account-api
   [invitation-api]=coachify-invitation-api [chat-api]=coachify-chat-api
-  [frontend]=coachify-frontend
+  [ai-api]=coachify-ai-api [frontend]=coachify-frontend
 )
 declare -A SVC_PORT=(
   [identifier-api]=8080 [notification-api]=8081 [account-api]=8082 [chat-api]=8083
   [content-api]=8084 [invitation-api]=8085 [payments-api]=8086 [workout-api]=8087
-  [tracker-api]=8088 [statistics-api]=8089 [frontend]=3000
+  [tracker-api]=8088 [statistics-api]=8089 [ai-api]=8090 [frontend]=3000
 )
 declare -A SVC_IMG=(
   [identifier-api]=coachify-identifier-api [notification-api]=coachify-notification-api
@@ -44,11 +44,11 @@ declare -A SVC_IMG=(
   [tracker-api]=coachify-tracker-api [statistics-api]=coachify-statistics-api
   [payments-api]=coachify-payments-api [account-api]=coachify-account-api
   [invitation-api]=coachify-invitation-api [chat-api]=coachify-chat-api
-  [frontend]=coachify-frontend
+  [ai-api]=coachify-ai-api [frontend]=coachify-frontend
 )
 declare -A SVC_HPATH=([frontend]=/api/auth/session)   # others default to /health
 DEPLOY_ORDER=(identifier-api notification-api content-api workout-api tracker-api
-  statistics-api payments-api account-api invitation-api chat-api frontend)
+  statistics-api payments-api account-api invitation-api chat-api ai-api frontend)
 
 # ---------------------------------------------------------------- settings (env-overridable for tests)
 DIR="${COACHIFY_DIR:-$HOME/production/coachify}"

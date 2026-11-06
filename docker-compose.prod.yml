@@ -414,15 +414,14 @@ services:
           cpus: '0.25'
           memory: 128M
 
-  # AI assistant (Gemini/Groq/OpenRouter/Mistral fallback chain). Provider keys live in
-  # .env.ai (chmod 600), never in the shared .env.production.
+  # AI assistant (Gemini/Groq/OpenRouter/Mistral fallback chain). Provider keys (AI_*_API_KEY)
+  # and optional AI_* overrides are set in .env.production; see coachify-ai-api/.env.ai.example.
   ai-api:
     image: ghcr.io/sport-stride/coachify-ai-api:${AI_API_VERSION:-latest}
     container_name: coachify-ai-api
     restart: unless-stopped
     env_file:
       - .env.production
-      - .env.ai
     environment:
       - PORT=8090
       - ENVIRONMENT=production
